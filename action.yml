@@ -136,7 +136,7 @@ runs:
       shell: bash
       run: |
         git config --global user.name "DevDuck" 2>/dev/null
-        git config --global user.email "hey@redduck.dev" 2>/dev/null
+        git config --global user.email "hey@dev.duck.nyc" 2>/dev/null
 
     - name: Configure AWS credentials
       if: inputs.aws_role_arn != ''

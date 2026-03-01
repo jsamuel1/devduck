@@ -98,7 +98,9 @@ def _get_algorithm_class(name: str):
     """Dynamically import an SB3 algorithm class."""
     name = name.upper()
     if name not in ALGORITHMS:
-        raise ValueError(f"Unknown algorithm: {name}. Available: {list(ALGORITHMS.keys())}")
+        raise ValueError(
+            f"Unknown algorithm: {name}. Available: {list(ALGORITHMS.keys())}"
+        )
     module_path, class_name = ALGORITHMS[name].rsplit(".", 1)
     mod = importlib.import_module(module_path)
     return getattr(mod, class_name)
@@ -114,7 +116,7 @@ def _resolve_policy_type(policy_type: str, env) -> str:
         return resolved
 
     # Auto-detect from observation space
-    obs_space = env.observation_space if hasattr(env, 'observation_space') else None
+    obs_space = env.observation_space if hasattr(env, "observation_space") else None
     if obs_space is None:
         return "MlpPolicy"
 
@@ -164,6 +166,7 @@ def _load_custom_env(name: str, path: Path):
     spec.loader.exec_module(mod)
 
     import gymnasium as gym
+
     for attr_name in dir(mod):
         attr = getattr(mod, attr_name)
         if isinstance(attr, type) and issubclass(attr, gym.Env) and attr is not gym.Env:
@@ -198,6 +201,7 @@ def _render_env_to_image(env, model=None, seed=42, steps=0):
 
     # Convert numpy array to PNG bytes
     from PIL import Image
+
     if isinstance(frame, np.ndarray):
         img = Image.fromarray(frame)
     else:
@@ -248,7 +252,7 @@ def _render_multiple_frames(env, model, seed=42, n_frames=4, frame_interval=10):
         h, w = f.shape[:2]
         if f.ndim == 2:  # Grayscale
             f = np.stack([f, f, f], axis=-1)
-        grid[:h, x_offset:x_offset + w, :] = f[:, :, :3]
+        grid[:h, x_offset : x_offset + w, :] = f[:, :, :3]
         x_offset += w
 
     img = Image.fromarray(grid)
@@ -261,6 +265,7 @@ def _render_multiple_frames(env, model, seed=42, n_frames=4, frame_interval=10):
 
 
 # ─── Training Progress Callback ─────────────────────────────────────────────
+
 
 class _ProgressCallback:
     """Simple training progress tracker."""
@@ -297,6 +302,7 @@ class _ProgressCallback:
 
 # ─── RL Actions ──────────────────────────────────────────────────────────────
 
+
 def _action_train(
     env_id: str,
     algorithm: str = "PPO",
@@ -322,11 +328,13 @@ def _action_train(
         def _init():
             env = _make_env(env_id, seed=seed + i)
             return Monitor(env)
+
         return _init
 
     if n_envs > 1:
         try:
             import multiprocessing
+
             multiprocessing.set_start_method("forkserver", force=True)
             train_env = SubprocVecEnv([make_train_env(i) for i in range(n_envs)])
         except Exception:
@@ -356,13 +364,23 @@ def _action_train(
     if algorithm.upper() == "DQN" and not isinstance(action_space, gym.spaces.Discrete):
         return {
             "status": "error",
-            "content": [{"text": f"❌ DQN requires discrete actions, but {env_id} has {type(action_space).__name__}. Use PPO, SAC, TD3, or DDPG instead."}],
+            "content": [
+                {
+                    "text": f"❌ DQN requires discrete actions, but {env_id} has {type(action_space).__name__}. Use PPO, SAC, TD3, or DDPG instead."
+                }
+            ],
         }
 
-    if algorithm.upper() in ("SAC", "TD3", "DDPG") and isinstance(action_space, gym.spaces.Discrete):
+    if algorithm.upper() in ("SAC", "TD3", "DDPG") and isinstance(
+        action_space, gym.spaces.Discrete
+    ):
         return {
             "status": "error",
-            "content": [{"text": f"❌ {algorithm} requires continuous actions, but {env_id} has Discrete. Use PPO, A2C, or DQN instead."}],
+            "content": [
+                {
+                    "text": f"❌ {algorithm} requires continuous actions, but {env_id} has Discrete. Use PPO, A2C, or DQN instead."
+                }
+            ],
         }
 
     # Hyperparameters
@@ -378,7 +396,9 @@ def _action_train(
     print(f"   Action space: {action_space}")
     print(f"   Obs space: {obs_space}")
     if hp:
-        filtered_hp = {k: str(v) for k, v in hp.items() if k not in ('verbose', 'device', 'seed')}
+        filtered_hp = {
+            k: str(v) for k, v in hp.items() if k not in ("verbose", "device", "seed")
+        }
         if filtered_hp:
             print(f"   Hyperparams: {json.dumps(filtered_hp, indent=2)}")
     print()
@@ -417,12 +437,15 @@ def _action_train(
     eval_log = log_dir / "evaluations.npz"
     if eval_log.exists():
         import numpy as np
+
         data = np.load(str(eval_log))
         if "results" in data:
             results = data["results"]
             eval_results = {
                 "best_mean_reward": float(results.mean(axis=1).max()),
-                "final_mean_reward": float(results[-1].mean()) if len(results) > 0 else 0,
+                "final_mean_reward": (
+                    float(results[-1].mean()) if len(results) > 0 else 0
+                ),
                 "best_std": float(results[results.mean(axis=1).argmax()].std()),
             }
 
@@ -433,7 +456,9 @@ def _action_train(
         if best_model_path.with_suffix(".zip").exists():
             vis_env = _make_env(env_id, seed=seed, render_mode="rgb_array")
             best_model = algo_cls.load(str(best_model_path))
-            img_block = _render_multiple_frames(vis_env, best_model, seed=seed, n_frames=4, frame_interval=20)
+            img_block = _render_multiple_frames(
+                vis_env, best_model, seed=seed, n_frames=4, frame_interval=20
+            )
             vis_env.close()
             if img_block:
                 visual_content.append(img_block)
@@ -458,15 +483,17 @@ def _action_train(
 
     content = [
         {"text": summary},
-        {"json": {
-            "model_path": str(final_path),
-            "best_model_path": str(model_dir / "best" / "best_model"),
-            "log_dir": str(log_dir),
-            "elapsed_seconds": elapsed,
-            "fps": fps,
-            "policy_type": resolved_policy,
-            **eval_results,
-        }},
+        {
+            "json": {
+                "model_path": str(final_path),
+                "best_model_path": str(model_dir / "best" / "best_model"),
+                "log_dir": str(log_dir),
+                "elapsed_seconds": elapsed,
+                "fps": fps,
+                "policy_type": resolved_policy,
+                **eval_results,
+            }
+        },
     ]
     content.extend(visual_content)
 
@@ -504,7 +531,12 @@ def _action_eval(
                 break
 
     if env_id is None:
-        return {"status": "error", "content": [{"text": "❌ Could not auto-detect env_id. Please specify it."}]}
+        return {
+            "status": "error",
+            "content": [
+                {"text": "❌ Could not auto-detect env_id. Please specify it."}
+            ],
+        }
 
     algo_cls = _get_algorithm_class(algorithm)
     model = algo_cls.load(model_path)
@@ -535,7 +567,9 @@ def _action_eval(
         episode_lengths.append(steps)
 
         if (ep + 1) % max(1, n_episodes // 5) == 0:
-            print(f"  Episode {ep + 1}/{n_episodes}: reward={total_reward:.2f}, steps={steps}")
+            print(
+                f"  Episode {ep + 1}/{n_episodes}: reward={total_reward:.2f}, steps={steps}"
+            )
 
     env.close()
 
@@ -553,22 +587,26 @@ def _action_eval(
 
     content = [
         {"text": summary},
-        {"json": {
-            "mean_reward": float(rewards.mean()),
-            "std_reward": float(rewards.std()),
-            "min_reward": float(rewards.min()),
-            "max_reward": float(rewards.max()),
-            "mean_length": float(lengths.mean()),
-            "success_rate": float((rewards > 0).mean()),
-            "all_rewards": [float(r) for r in rewards],
-        }},
+        {
+            "json": {
+                "mean_reward": float(rewards.mean()),
+                "std_reward": float(rewards.std()),
+                "min_reward": float(rewards.min()),
+                "max_reward": float(rewards.max()),
+                "mean_length": float(lengths.mean()),
+                "success_rate": float((rewards > 0).mean()),
+                "all_rewards": [float(r) for r in rewards],
+            }
+        },
     ]
 
     # If render requested, return visual frames as images
     if render and render_mode == "rgb_array":
         try:
             vis_env = _make_env(env_id, seed=seed, render_mode="rgb_array")
-            grid_img = _render_multiple_frames(vis_env, model, seed=seed, n_frames=4, frame_interval=20)
+            grid_img = _render_multiple_frames(
+                vis_env, model, seed=seed, n_frames=4, frame_interval=20
+            )
             vis_env.close()
             if grid_img:
                 content.append(grid_img)
@@ -617,7 +655,12 @@ def _action_play(
                 break
 
     if env_id is None:
-        return {"status": "error", "content": [{"text": "❌ Could not auto-detect env_id. Please specify it."}]}
+        return {
+            "status": "error",
+            "content": [
+                {"text": "❌ Could not auto-detect env_id. Please specify it."}
+            ],
+        }
 
     algo_cls = _get_algorithm_class(algorithm)
     model = algo_cls.load(model_path)
@@ -654,7 +697,9 @@ def _action_play(
 
     # Render frames as images for the agent to see
     if not record_video:
-        grid_img = _render_multiple_frames(env, model, seed=seed, n_frames=4, frame_interval=15)
+        grid_img = _render_multiple_frames(
+            env, model, seed=seed, n_frames=4, frame_interval=15
+        )
         if grid_img:
             content.append(grid_img)
 
@@ -700,27 +745,43 @@ def _action_render_frame(
         algo_cls = _get_algorithm_class(algorithm)
         model = algo_cls.load(model_path)
 
-        grid_img = _render_multiple_frames(env, model, seed=seed, n_frames=n_frames, frame_interval=frame_interval)
+        grid_img = _render_multiple_frames(
+            env, model, seed=seed, n_frames=n_frames, frame_interval=frame_interval
+        )
         if grid_img:
-            content.append({"text": f"📸 {n_frames} frames from {env_id} with trained {algorithm} agent (every {frame_interval} steps):"})
+            content.append(
+                {
+                    "text": f"📸 {n_frames} frames from {env_id} with trained {algorithm} agent (every {frame_interval} steps):"
+                }
+            )
             content.append(grid_img)
         else:
-            content.append({"text": "⚠ Could not render frames (env may not support rgb_array)"})
+            content.append(
+                {"text": "⚠ Could not render frames (env may not support rgb_array)"}
+            )
     else:
         # Render with random actions
         import numpy as np
+
         obs, _ = env.reset(seed=seed)
 
         frame = env.render()
         if frame is not None and isinstance(frame, np.ndarray):
             from PIL import Image
+
             img = Image.fromarray(frame)
             buf = io.BytesIO()
             img.save(buf, format="PNG")
-            content.append({"text": f"📸 Initial frame from {env_id} (no model, random state):"})
-            content.append({"image": {"format": "png", "source": {"bytes": buf.getvalue()}}})
+            content.append(
+                {"text": f"📸 Initial frame from {env_id} (no model, random state):"}
+            )
+            content.append(
+                {"image": {"format": "png", "source": {"bytes": buf.getvalue()}}}
+            )
         else:
-            content.append({"text": "⚠ Could not render (env may not support rgb_array)"})
+            content.append(
+                {"text": "⚠ Could not render (env may not support rgb_array)"}
+            )
 
     env.close()
     return {"status": "success", "content": content}
@@ -756,13 +817,17 @@ def _action_create_env(
         is_image = False
 
     if act_type == "continuous":
-        action_space_code = f"spaces.Box(low=-1.0, high=1.0, shape=({act_dim},), dtype=np.float32)"
+        action_space_code = (
+            f"spaces.Box(low=-1.0, high=1.0, shape=({act_dim},), dtype=np.float32)"
+        )
     else:
         action_space_code = f"spaces.Discrete({act_dim})"
 
     # Observation space
     if is_image:
-        obs_space_code = f"spaces.Box(low=0, high=255, shape={obs_shape_str}, dtype=np.uint8)"
+        obs_space_code = (
+            f"spaces.Box(low=0, high=255, shape={obs_shape_str}, dtype=np.uint8)"
+        )
     else:
         obs_space_code = f"spaces.Box(low=-np.inf, high=np.inf, shape={obs_shape_str}, dtype=np.float32)"
 
@@ -918,19 +983,26 @@ class {env_name.title().replace("_", "")}Env(gym.Env):
         if frame is not None:
             import numpy as np
             from PIL import Image
+
             if isinstance(frame, np.ndarray):
                 img = Image.fromarray(frame)
                 buf = io.BytesIO()
                 img.save(buf, format="PNG")
                 content.append({"text": "📸 Initial render:"})
-                content.append({"image": {"format": "png", "source": {"bytes": buf.getvalue()}}})
+                content.append(
+                    {"image": {"format": "png", "source": {"bytes": buf.getvalue()}}}
+                )
 
         return {"status": "success", "content": content}
 
     except Exception as e:
         return {
             "status": "error",
-            "content": [{"text": f"❌ Environment validation failed:\n{traceback.format_exc()}\n\nFile saved at {env_file} — fix and retry."}],
+            "content": [
+                {
+                    "text": f"❌ Environment validation failed:\n{traceback.format_exc()}\n\nFile saved at {env_file} — fix and retry."
+                }
+            ],
         }
 
 
@@ -943,7 +1015,16 @@ def _action_list_envs(category: str = None) -> Dict[str, Any]:
     categories = {
         "classic": ["CartPole", "MountainCar", "Pendulum", "Acrobot", "LunarLander"],
         "box2d": ["BipedalWalker", "CarRacing", "LunarLander"],
-        "mujoco": ["Ant", "HalfCheetah", "Hopper", "Humanoid", "Reacher", "Swimmer", "Walker2d", "InvertedPendulum"],
+        "mujoco": [
+            "Ant",
+            "HalfCheetah",
+            "Hopper",
+            "Humanoid",
+            "Reacher",
+            "Swimmer",
+            "Walker2d",
+            "InvertedPendulum",
+        ],
         "atari": ["Breakout", "Pong", "SpaceInvaders"],
     }
 
@@ -958,12 +1039,16 @@ def _action_list_envs(category: str = None) -> Dict[str, Any]:
     else:
         for cat, keywords in categories.items():
             cat_envs = [e for e in all_envs if any(k in e for k in keywords)]
-            lines.append(f"**{cat.upper()}** ({len(cat_envs)}): {', '.join(sorted(cat_envs)[:5])}...")
+            lines.append(
+                f"**{cat.upper()}** ({len(cat_envs)}): {', '.join(sorted(cat_envs)[:5])}..."
+            )
 
         lines.append(f"\n**Total registered**: {len(list(all_envs))}")
 
     # Custom envs
-    custom_files = list(RL_CUSTOM_ENVS_DIR.glob("*.py")) if RL_CUSTOM_ENVS_DIR.exists() else []
+    custom_files = (
+        list(RL_CUSTOM_ENVS_DIR.glob("*.py")) if RL_CUSTOM_ENVS_DIR.exists() else []
+    )
     if custom_files or _custom_envs:
         lines.append(f"\n**CUSTOM** ({max(len(custom_files), len(_custom_envs))}):")
         names = set(list(_custom_envs.keys()) + [f.stem for f in custom_files])
@@ -1008,7 +1093,9 @@ def _action_list_models() -> Dict[str, Any]:
         for model_dir in sorted(ML_MODELS_DIR.iterdir()):
             if not model_dir.is_dir():
                 continue
-            size_mb = sum(f.stat().st_size for f in model_dir.rglob("*") if f.is_file()) / (1024 * 1024)
+            size_mb = sum(
+                f.stat().st_size for f in model_dir.rglob("*") if f.is_file()
+            ) / (1024 * 1024)
             lines.append(f"  📁 **{model_dir.name}** ({size_mb:.1f} MB)")
 
     return {"status": "success", "content": [{"text": "\n".join(lines)}]}
@@ -1027,14 +1114,64 @@ def _action_sweep(
 
     search_spaces = {
         "PPO": [
-            {"learning_rate": 3e-4, "n_steps": 2048, "batch_size": 64, "n_epochs": 10, "gamma": 0.99},
-            {"learning_rate": 1e-3, "n_steps": 1024, "batch_size": 32, "n_epochs": 5, "gamma": 0.99},
-            {"learning_rate": 1e-4, "n_steps": 4096, "batch_size": 128, "n_epochs": 20, "gamma": 0.999},
-            {"learning_rate": 5e-4, "n_steps": 512, "batch_size": 64, "n_epochs": 10, "gamma": 0.98},
-            {"learning_rate": 3e-4, "n_steps": 2048, "batch_size": 256, "n_epochs": 10, "gamma": 0.995},
-            {"learning_rate": 7e-4, "n_steps": 1024, "batch_size": 64, "n_epochs": 15, "gamma": 0.99},
-            {"learning_rate": 2e-4, "n_steps": 2048, "batch_size": 64, "n_epochs": 10, "gamma": 0.999, "ent_coef": 0.01},
-            {"learning_rate": 5e-4, "n_steps": 2048, "batch_size": 128, "n_epochs": 5, "gamma": 0.99, "clip_range": 0.1},
+            {
+                "learning_rate": 3e-4,
+                "n_steps": 2048,
+                "batch_size": 64,
+                "n_epochs": 10,
+                "gamma": 0.99,
+            },
+            {
+                "learning_rate": 1e-3,
+                "n_steps": 1024,
+                "batch_size": 32,
+                "n_epochs": 5,
+                "gamma": 0.99,
+            },
+            {
+                "learning_rate": 1e-4,
+                "n_steps": 4096,
+                "batch_size": 128,
+                "n_epochs": 20,
+                "gamma": 0.999,
+            },
+            {
+                "learning_rate": 5e-4,
+                "n_steps": 512,
+                "batch_size": 64,
+                "n_epochs": 10,
+                "gamma": 0.98,
+            },
+            {
+                "learning_rate": 3e-4,
+                "n_steps": 2048,
+                "batch_size": 256,
+                "n_epochs": 10,
+                "gamma": 0.995,
+            },
+            {
+                "learning_rate": 7e-4,
+                "n_steps": 1024,
+                "batch_size": 64,
+                "n_epochs": 15,
+                "gamma": 0.99,
+            },
+            {
+                "learning_rate": 2e-4,
+                "n_steps": 2048,
+                "batch_size": 64,
+                "n_epochs": 10,
+                "gamma": 0.999,
+                "ent_coef": 0.01,
+            },
+            {
+                "learning_rate": 5e-4,
+                "n_steps": 2048,
+                "batch_size": 128,
+                "n_epochs": 5,
+                "gamma": 0.99,
+                "clip_range": 0.1,
+            },
         ],
         "A2C": [
             {"learning_rate": 7e-4, "n_steps": 5, "gamma": 0.99},
@@ -1044,25 +1181,80 @@ def _action_sweep(
             {"learning_rate": 1e-4, "n_steps": 32, "gamma": 0.99},
         ],
         "DQN": [
-            {"learning_rate": 1e-3, "buffer_size": 100000, "batch_size": 32, "gamma": 0.99},
-            {"learning_rate": 5e-4, "buffer_size": 50000, "batch_size": 64, "gamma": 0.99},
-            {"learning_rate": 1e-4, "buffer_size": 200000, "batch_size": 128, "gamma": 0.999},
-            {"learning_rate": 3e-4, "buffer_size": 100000, "batch_size": 32, "gamma": 0.98},
-            {"learning_rate": 5e-4, "buffer_size": 100000, "batch_size": 64, "gamma": 0.99, "exploration_fraction": 0.2},
+            {
+                "learning_rate": 1e-3,
+                "buffer_size": 100000,
+                "batch_size": 32,
+                "gamma": 0.99,
+            },
+            {
+                "learning_rate": 5e-4,
+                "buffer_size": 50000,
+                "batch_size": 64,
+                "gamma": 0.99,
+            },
+            {
+                "learning_rate": 1e-4,
+                "buffer_size": 200000,
+                "batch_size": 128,
+                "gamma": 0.999,
+            },
+            {
+                "learning_rate": 3e-4,
+                "buffer_size": 100000,
+                "batch_size": 32,
+                "gamma": 0.98,
+            },
+            {
+                "learning_rate": 5e-4,
+                "buffer_size": 100000,
+                "batch_size": 64,
+                "gamma": 0.99,
+                "exploration_fraction": 0.2,
+            },
         ],
         "SAC": [
-            {"learning_rate": 3e-4, "buffer_size": 100000, "batch_size": 256, "gamma": 0.99},
-            {"learning_rate": 1e-3, "buffer_size": 50000, "batch_size": 128, "gamma": 0.99},
-            {"learning_rate": 1e-4, "buffer_size": 300000, "batch_size": 256, "gamma": 0.999},
-            {"learning_rate": 5e-4, "buffer_size": 100000, "batch_size": 64, "gamma": 0.98},
-            {"learning_rate": 3e-4, "buffer_size": 200000, "batch_size": 256, "gamma": 0.99, "tau": 0.01},
+            {
+                "learning_rate": 3e-4,
+                "buffer_size": 100000,
+                "batch_size": 256,
+                "gamma": 0.99,
+            },
+            {
+                "learning_rate": 1e-3,
+                "buffer_size": 50000,
+                "batch_size": 128,
+                "gamma": 0.99,
+            },
+            {
+                "learning_rate": 1e-4,
+                "buffer_size": 300000,
+                "batch_size": 256,
+                "gamma": 0.999,
+            },
+            {
+                "learning_rate": 5e-4,
+                "buffer_size": 100000,
+                "batch_size": 64,
+                "gamma": 0.98,
+            },
+            {
+                "learning_rate": 3e-4,
+                "buffer_size": 200000,
+                "batch_size": 256,
+                "gamma": 0.99,
+                "tau": 0.01,
+            },
         ],
     }
 
     configs = search_spaces.get(algorithm.upper(), search_spaces["PPO"])[:n_trials]
     while len(configs) < n_trials:
         base = configs[np.random.randint(0, len(configs))]
-        variant = {k: v * np.random.uniform(0.5, 2.0) if isinstance(v, float) else v for k, v in base.items()}
+        variant = {
+            k: v * np.random.uniform(0.5, 2.0) if isinstance(v, float) else v
+            for k, v in base.items()
+        }
         configs.append(variant)
 
     print(f"\n🔍 Hyperparameter sweep: {algorithm} on {env_id}")
@@ -1071,12 +1263,17 @@ def _action_sweep(
     results = []
     for i, hp in enumerate(configs):
         print(f"\n--- Trial {i + 1}/{n_trials} ---")
-        print(f"   Config: {json.dumps({k: round(v, 6) if isinstance(v, float) else v for k, v in hp.items()})}")
+        print(
+            f"   Config: {json.dumps({k: round(v, 6) if isinstance(v, float) else v for k, v in hp.items()})}"
+        )
 
         try:
             result = _action_train(
-                env_id=env_id, algorithm=algorithm, total_timesteps=total_timesteps,
-                seed=seed + i * 100, hyperparams=hp,
+                env_id=env_id,
+                algorithm=algorithm,
+                total_timesteps=total_timesteps,
+                seed=seed + i * 100,
+                hyperparams=hp,
                 save_name=f"sweep_{env_id.replace('/', '_')}_{algorithm}_trial{i}",
                 policy_type=policy_type,
             )
@@ -1088,12 +1285,28 @@ def _action_sweep(
                     break
 
             mean_reward = json_data.get("best_mean_reward", 0) if json_data else 0
-            results.append({"trial": i, "config": hp, "mean_reward": mean_reward, "model_path": json_data.get("best_model_path", "") if json_data else ""})
+            results.append(
+                {
+                    "trial": i,
+                    "config": hp,
+                    "mean_reward": mean_reward,
+                    "model_path": (
+                        json_data.get("best_model_path", "") if json_data else ""
+                    ),
+                }
+            )
             print(f"   → Mean reward: {mean_reward:.2f}")
 
         except Exception as e:
             print(f"   → Failed: {e}")
-            results.append({"trial": i, "config": hp, "mean_reward": -float("inf"), "error": str(e)})
+            results.append(
+                {
+                    "trial": i,
+                    "config": hp,
+                    "mean_reward": -float("inf"),
+                    "error": str(e),
+                }
+            )
 
     best = max(results, key=lambda x: x["mean_reward"])
 
@@ -1145,7 +1358,12 @@ def _action_continue_training(
                 break
 
     if env_id is None:
-        return {"status": "error", "content": [{"text": "❌ Could not auto-detect env_id. Please specify it."}]}
+        return {
+            "status": "error",
+            "content": [
+                {"text": "❌ Could not auto-detect env_id. Please specify it."}
+            ],
+        }
 
     from stable_baselines3.common.vec_env import DummyVecEnv
     from stable_baselines3.common.monitor import Monitor
@@ -1162,7 +1380,11 @@ def _action_continue_training(
     progress = _ProgressCallback(additional_timesteps)
     start_time = time.time()
 
-    model.learn(total_timesteps=additional_timesteps, callback=[progress.get()], reset_num_timesteps=False)
+    model.learn(
+        total_timesteps=additional_timesteps,
+        callback=[progress.get()],
+        reset_num_timesteps=False,
+    )
 
     model.save(model_path)
     elapsed = time.time() - start_time
@@ -1170,7 +1392,11 @@ def _action_continue_training(
 
     return {
         "status": "success",
-        "content": [{"text": f"✅ Continued training for {additional_timesteps:,} more steps ({elapsed:.1f}s). Model saved to {model_path}"}],
+        "content": [
+            {
+                "text": f"✅ Continued training for {additional_timesteps:,} more steps ({elapsed:.1f}s). Model saved to {model_path}"
+            }
+        ],
     }
 
 
@@ -1195,8 +1421,11 @@ def _action_compare(
         print(f"\n📊 Evaluating: {Path(path).parent.name} ({algorithm})")
 
         eval_result = _action_eval(
-            model_path=path, env_id=env_id, algorithm=algorithm,
-            n_episodes=n_episodes, seed=seed,
+            model_path=path,
+            env_id=env_id,
+            algorithm=algorithm,
+            n_episodes=n_episodes,
+            seed=seed,
         )
 
         json_data = None
@@ -1205,17 +1434,23 @@ def _action_compare(
                 json_data = content["json"]
                 break
 
-        results.append({
-            "path": path, "name": Path(path).parent.name, "algorithm": algorithm,
-            **(json_data or {"mean_reward": 0, "std_reward": 0}),
-        })
+        results.append(
+            {
+                "path": path,
+                "name": Path(path).parent.name,
+                "algorithm": algorithm,
+                **(json_data or {"mean_reward": 0, "std_reward": 0}),
+            }
+        )
 
     results.sort(key=lambda x: x["mean_reward"], reverse=True)
 
     lines = [f"\n🏆 Model Comparison on {env_id} ({n_episodes} episodes each):\n"]
     for i, r in enumerate(results):
         medal = "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "  "
-        lines.append(f"  {medal} {r['name']} ({r['algorithm']}): {r['mean_reward']:.2f} ± {r.get('std_reward', 0):.2f}")
+        lines.append(
+            f"  {medal} {r['name']} ({r['algorithm']}): {r['mean_reward']:.2f} ± {r.get('std_reward', 0):.2f}"
+        )
 
     return {
         "status": "success",
@@ -1224,6 +1459,7 @@ def _action_compare(
 
 
 # ─── LLM Fine-tuning Actions ────────────────────────────────────────────────
+
 
 def _action_finetune(
     model_id: str,
@@ -1268,7 +1504,11 @@ def _action_finetune(
     except ImportError as e:
         return {
             "status": "error",
-            "content": [{"text": f"❌ Missing dependency: {e}\n\nInstall: pip install transformers datasets torch peft trl accelerate"}],
+            "content": [
+                {
+                    "text": f"❌ Missing dependency: {e}\n\nInstall: pip install transformers datasets torch peft trl accelerate"
+                }
+            ],
         }
 
     ML_MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1304,7 +1544,10 @@ def _action_finetune(
         else:
             dataset = load_dataset(dataset_path, split="train")
     else:
-        return {"status": "error", "content": [{"text": "❌ Either dataset_id or dataset_path required"}]}
+        return {
+            "status": "error",
+            "content": [{"text": "❌ Either dataset_id or dataset_path required"}],
+        }
 
     if max_samples and max_samples < len(dataset):
         dataset = dataset.select(range(max_samples))
@@ -1319,10 +1562,18 @@ def _action_finetune(
 
     # Tokenize dataset
     def tokenize_fn(examples):
-        texts = examples[text_field] if text_field in examples else examples[list(examples.keys())[0]]
-        return tokenizer(texts, truncation=True, max_length=max_seq_length, padding="max_length")
+        texts = (
+            examples[text_field]
+            if text_field in examples
+            else examples[list(examples.keys())[0]]
+        )
+        return tokenizer(
+            texts, truncation=True, max_length=max_seq_length, padding="max_length"
+        )
 
-    tokenized = dataset.map(tokenize_fn, batched=True, remove_columns=dataset.column_names)
+    tokenized = dataset.map(
+        tokenize_fn, batched=True, remove_columns=dataset.column_names
+    )
 
     # Load model
     model_kwargs = {"trust_remote_code": True}
@@ -1358,10 +1609,15 @@ def _action_finetune(
             trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
             total = sum(p.numel() for p in model.parameters())
             print(f"   LoRA: r={lora_r}, alpha={lora_alpha}")
-            print(f"   Trainable params: {trainable:,} / {total:,} ({trainable/total*100:.2f}%)")
+            print(
+                f"   Trainable params: {trainable:,} / {total:,} ({trainable/total*100:.2f}%)"
+            )
 
         except ImportError:
-            return {"status": "error", "content": [{"text": "❌ pip install peft required for LoRA"}]}
+            return {
+                "status": "error",
+                "content": [{"text": "❌ pip install peft required for LoRA"}],
+            }
 
     # Move to device
     if device_str != "cpu":
@@ -1463,7 +1719,11 @@ def _action_sft(
     except ImportError as e:
         return {
             "status": "error",
-            "content": [{"text": f"❌ Missing dependency: {e}\n\nInstall: pip install trl transformers datasets peft"}],
+            "content": [
+                {
+                    "text": f"❌ Missing dependency: {e}\n\nInstall: pip install trl transformers datasets peft"
+                }
+            ],
         }
 
     ML_MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -1491,7 +1751,10 @@ def _action_sft(
         else:
             dataset = load_dataset(dataset_path, split="train")
     else:
-        return {"status": "error", "content": [{"text": "❌ Either dataset_id or dataset_path required"}]}
+        return {
+            "status": "error",
+            "content": [{"text": "❌ Either dataset_id or dataset_path required"}],
+        }
 
     if max_samples and max_samples < len(dataset):
         dataset = dataset.select(range(max_samples))
@@ -1514,6 +1777,7 @@ def _action_sft(
     peft_config = None
     try:
         from peft import LoraConfig
+
         peft_config = LoraConfig(
             r=lora_r,
             lora_alpha=lora_alpha,
@@ -1573,7 +1837,10 @@ def _action_sft(
 
     return {
         "status": "success",
-        "content": [{"text": summary}, {"json": {"output_dir": out_dir, "elapsed": elapsed, "metrics": metrics}}],
+        "content": [
+            {"text": summary},
+            {"json": {"output_dir": out_dir, "elapsed": elapsed, "metrics": metrics}},
+        ],
     }
 
 
@@ -1640,6 +1907,7 @@ def _action_inference(
 
 # ─── Helper ──────────────────────────────────────────────────────────────────
 
+
 def _indent(code: str, spaces: int) -> str:
     """Indent code block by N spaces."""
     prefix = " " * spaces
@@ -1647,6 +1915,7 @@ def _indent(code: str, spaces: int) -> str:
 
 
 # ─── Main Tool Entry Point ──────────────────────────────────────────────────
+
 
 @tool
 def rl(
@@ -1766,47 +2035,94 @@ def rl(
         # ── RL Actions ──
         if action == "train":
             if not env_id:
-                return {"status": "error", "content": [{"text": "❌ env_id required for training"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ env_id required for training"}],
+                }
             return _action_train(
-                env_id=env_id, algorithm=algorithm, total_timesteps=total_timesteps,
-                seed=seed, hyperparams=hp, save_name=save_name, n_envs=n_envs,
-                eval_freq=eval_freq, device=device, policy_type=policy_type,
+                env_id=env_id,
+                algorithm=algorithm,
+                total_timesteps=total_timesteps,
+                seed=seed,
+                hyperparams=hp,
+                save_name=save_name,
+                n_envs=n_envs,
+                eval_freq=eval_freq,
+                device=device,
+                policy_type=policy_type,
             )
 
         elif action == "eval":
             if not model_path:
-                return {"status": "error", "content": [{"text": "❌ model_path required for evaluation"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ model_path required for evaluation"}],
+                }
             return _action_eval(
-                model_path=model_path, env_id=env_id, algorithm=algorithm,
-                n_episodes=n_episodes, deterministic=deterministic, seed=seed, render=render,
+                model_path=model_path,
+                env_id=env_id,
+                algorithm=algorithm,
+                n_episodes=n_episodes,
+                deterministic=deterministic,
+                seed=seed,
+                render=render,
             )
 
         elif action == "play":
             if not model_path:
-                return {"status": "error", "content": [{"text": "❌ model_path required for play"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ model_path required for play"}],
+                }
             return _action_play(
-                model_path=model_path, env_id=env_id, algorithm=algorithm,
-                n_episodes=n_episodes, seed=seed, record_video=record_video,
-                video_path=video_path, render=render,
+                model_path=model_path,
+                env_id=env_id,
+                algorithm=algorithm,
+                n_episodes=n_episodes,
+                seed=seed,
+                record_video=record_video,
+                video_path=video_path,
+                render=render,
             )
 
         elif action == "render_frame":
             if not env_id:
                 return {"status": "error", "content": [{"text": "❌ env_id required"}]}
             return _action_render_frame(
-                env_id=env_id, model_path=model_path, algorithm=algorithm,
-                seed=seed, steps=steps, n_frames=n_frames, frame_interval=frame_interval,
+                env_id=env_id,
+                model_path=model_path,
+                algorithm=algorithm,
+                seed=seed,
+                steps=steps,
+                n_frames=n_frames,
+                frame_interval=frame_interval,
             )
 
         elif action == "create_env":
             if not env_name:
-                return {"status": "error", "content": [{"text": "❌ env_name required"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ env_name required"}],
+                }
             if not reward_code and not (step_code and reset_code):
-                return {"status": "error", "content": [{"text": "❌ Either reward_code OR (step_code + reset_code) required"}]}
+                return {
+                    "status": "error",
+                    "content": [
+                        {
+                            "text": "❌ Either reward_code OR (step_code + reset_code) required"
+                        }
+                    ],
+                }
             return _action_create_env(
-                env_name=env_name, reward_code=reward_code or "", obs_dim=obs_dim,
-                act_dim=act_dim, act_type=act_type, max_steps=max_steps,
-                description=description, reset_code=reset_code, step_code=step_code,
+                env_name=env_name,
+                reward_code=reward_code or "",
+                obs_dim=obs_dim,
+                act_dim=act_dim,
+                act_type=act_type,
+                max_steps=max_steps,
+                description=description,
+                reset_code=reset_code,
+                step_code=step_code,
             )
 
         elif action == "list_envs":
@@ -1817,67 +2133,130 @@ def rl(
 
         elif action == "sweep":
             if not env_id:
-                return {"status": "error", "content": [{"text": "❌ env_id required for sweep"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ env_id required for sweep"}],
+                }
             return _action_sweep(
-                env_id=env_id, algorithm=algorithm, n_trials=n_trials,
-                total_timesteps=total_timesteps, seed=seed, policy_type=policy_type,
+                env_id=env_id,
+                algorithm=algorithm,
+                n_trials=n_trials,
+                total_timesteps=total_timesteps,
+                seed=seed,
+                policy_type=policy_type,
             )
 
         elif action == "continue":
             if not model_path:
-                return {"status": "error", "content": [{"text": "❌ model_path required for continue"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ model_path required for continue"}],
+                }
             return _action_continue_training(
-                model_path=model_path, env_id=env_id, algorithm=algorithm,
-                additional_timesteps=additional_timesteps, seed=seed,
+                model_path=model_path,
+                env_id=env_id,
+                algorithm=algorithm,
+                additional_timesteps=additional_timesteps,
+                seed=seed,
             )
 
         elif action == "compare":
             if not model_paths:
-                return {"status": "error", "content": [{"text": "❌ model_paths required (comma-separated)"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ model_paths required (comma-separated)"}],
+                }
             if not env_id:
-                return {"status": "error", "content": [{"text": "❌ env_id required for compare"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ env_id required for compare"}],
+                }
             paths = [p.strip() for p in model_paths.split(",")]
-            return _action_compare(model_paths=paths, env_id=env_id, n_episodes=n_episodes, seed=seed)
+            return _action_compare(
+                model_paths=paths, env_id=env_id, n_episodes=n_episodes, seed=seed
+            )
 
         # ── LLM Actions ──
         elif action == "finetune":
             if not model_id:
-                return {"status": "error", "content": [{"text": "❌ model_id required (e.g., 'Qwen/Qwen2.5-0.5B')"}]}
+                return {
+                    "status": "error",
+                    "content": [
+                        {"text": "❌ model_id required (e.g., 'Qwen/Qwen2.5-0.5B')"}
+                    ],
+                }
             return _action_finetune(
-                model_id=model_id, dataset_id=dataset_id, dataset_path=dataset_path,
-                method=method, output_dir=output_dir, epochs=epochs, batch_size=batch_size,
-                learning_rate=learning_rate, max_seq_length=max_seq_length,
-                lora_r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout,
-                target_modules=target_modules, push_to_hub=push_to_hub, device=device,
-                fp16=fp16, bf16=bf16, gradient_accumulation_steps=gradient_accumulation_steps,
-                text_field=text_field, max_samples=max_samples,
+                model_id=model_id,
+                dataset_id=dataset_id,
+                dataset_path=dataset_path,
+                method=method,
+                output_dir=output_dir,
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                max_seq_length=max_seq_length,
+                lora_r=lora_r,
+                lora_alpha=lora_alpha,
+                lora_dropout=lora_dropout,
+                target_modules=target_modules,
+                push_to_hub=push_to_hub,
+                device=device,
+                fp16=fp16,
+                bf16=bf16,
+                gradient_accumulation_steps=gradient_accumulation_steps,
+                text_field=text_field,
+                max_samples=max_samples,
             )
 
         elif action == "sft":
             if not model_id:
-                return {"status": "error", "content": [{"text": "❌ model_id required"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ model_id required"}],
+                }
             return _action_sft(
-                model_id=model_id, dataset_id=dataset_id, dataset_path=dataset_path,
-                output_dir=output_dir, epochs=epochs, batch_size=batch_size,
-                learning_rate=learning_rate, max_seq_length=max_seq_length,
-                lora_r=lora_r, lora_alpha=lora_alpha, push_to_hub=push_to_hub,
-                device=device, max_samples=max_samples,
+                model_id=model_id,
+                dataset_id=dataset_id,
+                dataset_path=dataset_path,
+                output_dir=output_dir,
+                epochs=epochs,
+                batch_size=batch_size,
+                learning_rate=learning_rate,
+                max_seq_length=max_seq_length,
+                lora_r=lora_r,
+                lora_alpha=lora_alpha,
+                push_to_hub=push_to_hub,
+                device=device,
+                max_samples=max_samples,
             )
 
         elif action == "inference":
             if not model_path:
-                return {"status": "error", "content": [{"text": "❌ model_path required for inference"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ model_path required for inference"}],
+                }
             if not prompt:
-                return {"status": "error", "content": [{"text": "❌ prompt required for inference"}]}
+                return {
+                    "status": "error",
+                    "content": [{"text": "❌ prompt required for inference"}],
+                }
             return _action_inference(
-                model_path=model_path, prompt=prompt, max_new_tokens=max_new_tokens,
-                temperature=temperature, device=device,
+                model_path=model_path,
+                prompt=prompt,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                device=device,
             )
 
         else:
             return {
                 "status": "error",
-                "content": [{"text": f"❌ Unknown action: {action}.\n\nRL: train, eval, play, render_frame, create_env, list_envs, list_models, sweep, continue, compare\nLLM: finetune, sft, inference"}],
+                "content": [
+                    {
+                        "text": f"❌ Unknown action: {action}.\n\nRL: train, eval, play, render_frame, create_env, list_envs, list_models, sweep, continue, compare\nLLM: finetune, sft, inference"
+                    }
+                ],
             }
 
     except Exception as e:

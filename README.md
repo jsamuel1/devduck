@@ -25,6 +25,10 @@ Learn more: https://duck.nyc
 | 🌐 **Unified Mesh** | Connect CLI + browser + cloud agents in one mesh | All agents, one network 🕸️ |
 | ☁️ **Deploy CLI** | `devduck deploy --launch` to AgentCore | One-command cloud deploy 🚀 |
 | 🧩 **Browser Peers** | Browser tabs join the mesh as first-class peers | Open mesh.html to join 🌍 |
+| 🍎 **macOS Control** | Calendar, Mail, Safari, Finder, System & more | One tool for your Mac 💻 |
+| 🎵 **Spotify** | Full playback, playlists, discovery control | Music while you code 🎶 |
+| 💬 **Messaging** | Telegram, WhatsApp, Slack auto-reply bots | Multi-platform chat 📱 |
+| 🎮 **RL/ML Toolkit** | Train RL agents, fine-tune LLMs with LoRA | Machine learning built-in 🧠 |
 
 ---
 
@@ -81,6 +85,14 @@ devduck deploy --name my-agent --tools "strands_tools:shell,editor" --launch
 | 📝 **Self-Improvement** | Updates own system prompt | `system_prompt(action="add_context", ...)` |
 | ☁️ **AWS Deploy** | One-command serverless | `devduck deploy --launch` |
 | 🎤 **Speech-to-Speech** | Real-time voice conversations | `pip install devduck[speech]` |
+| 🍎 **macOS Control** | Calendar, Mail, Safari, Finder, System, Keychain & more | `use_mac(action="calendar.events")` |
+| 📝 **Apple Notes** | Create, edit, search, export notes | `apple_notes(action="list")` |
+| 🎵 **Spotify** | Full playback, search, playlists, discovery | `use_spotify(action="now_playing")` |
+| 💬 **Telegram** | Bot listener + full API access | `telegram(action="start_listener")` |
+| 💬 **WhatsApp** | Messaging via wacli (no Cloud API) | `whatsapp(action="send_text", to="...", text="...")` |
+| 💬 **Slack** | Socket Mode listener + messaging | `slack(action="start_listener")` |
+| 🔌 **JSON-RPC** | Generic RPC client (HTTP & WebSocket) | `jsonrpc(method="getInfo", endpoint="...")` |
+| 🎮 **RL/ML Toolkit** | Train RL agents, fine-tune LLMs | `rl(action="train", env_id="CartPole-v1")` |
 
 ---
 
@@ -110,11 +122,14 @@ graph TB
     A[User Input] -->|CLI/TCP/WS/MCP/IPC| B[DevDuck Core]
     B -->|Auto RAG| C[Knowledge Base]
     C -.->|Context Retrieval| B
-    B -->|Tool Calls| D[40+ Built-in Tools]
+    B -->|Tool Calls| D[54+ Built-in Tools]
     D --> E[shell/editor/calculator]
     D --> F[GitHub/AgentCore]
     D --> G[TCP/WebSocket/MCP/IPC]
     D --> H[tray/ambient/cursor/clipboard]
+    D --> O[Telegram/WhatsApp/Slack]
+    D --> P[use_mac/apple_notes/spotify]
+    D --> Q[rl/jsonrpc/scraper]
     B -->|Hot-reload| I[./tools/*.py + __init__.py]
     I -.->|Load Instantly| D
     B -->|Runtime| K[manage_tools/install_tools]
@@ -666,6 +681,239 @@ Deployed agents automatically appear in the unified mesh:
 
 ---
 
+## Messaging Integrations (Telegram, WhatsApp, Slack)
+
+DevDuck can listen and auto-reply on **Telegram**, **WhatsApp**, and **Slack** — each incoming message spawns a fresh DevDuck instance with full tool access.
+
+### Telegram
+
+```bash
+export TELEGRAM_BOT_TOKEN="your-bot-token"
+export STRANDS_TELEGRAM_AUTO_REPLY=true
+# Optional: restrict to specific users
+export TELEGRAM_ALLOWED_USERS="149632499,cagataycali"
+```
+
+```python
+# Start listening for messages
+telegram(action="start_listener")
+
+# Send messages
+telegram(action="send_message", chat_id="123456", text="Hello!")
+telegram(action="send_photo", chat_id="123456", file_path="/path/to/image.png")
+telegram(action="send_poll", chat_id="123456", question="Tabs or spaces?", options=["Tabs", "Spaces"])
+
+# Get bot info
+telegram(action="get_me")
+```
+
+### WhatsApp
+
+Uses [wacli](https://github.com/steipete/wacli) — no Cloud API needed, runs via WhatsApp Web protocol.
+
+```bash
+brew install steipete/tap/wacli && wacli auth
+export STRANDS_WHATSAPP_AUTO_REPLY=true
+```
+
+```python
+# Start listening
+whatsapp(action="start_listener")
+
+# Send messages
+whatsapp(action="send_text", to="+1234567890", text="Hello from DevDuck!")
+whatsapp(action="send_file", to="+1234567890", file_path="/path/to/doc.pdf")
+
+# Search & browse
+whatsapp(action="chats_list")
+whatsapp(action="messages_search", query="meeting notes")
+whatsapp(action="contacts_search", query="John")
+```
+
+### Slack
+
+```bash
+export SLACK_BOT_TOKEN="xoxb-..."
+export SLACK_APP_TOKEN="xapp-..."
+export STRANDS_SLACK_AUTO_REPLY=true
+```
+
+```python
+# Start Socket Mode listener
+slack(action="start_listener")
+
+# Send messages & react
+slack(action="send_message", channel="C123", text="Hello!")
+slack(action="send_message", channel="C123", text="Reply", thread_ts="1234.5678")
+slack(action="add_reaction", channel="C123", timestamp="1234.5678", emoji="thumbsup")
+
+# API passthrough
+slack(action="conversations_list")
+```
+
+---
+
+## macOS Integration (use_mac + Apple Notes)
+
+**One tool to control your entire Mac** — Calendar, Reminders, Mail, Contacts, Safari, Finder, System Events, Shortcuts, Messages, Music, Keychain, and raw AppleScript/JXA.
+
+```python
+# Calendar
+use_mac(action="calendar.events", days=7)
+use_mac(action="calendar.create", title="Meeting", start="2026-03-01 10:00", end="2026-03-01 11:00")
+
+# Reminders
+use_mac(action="reminders.create", title="Buy groceries", due_date="2026-03-02", priority=1)
+use_mac(action="reminders.list", list_name="Work")
+
+# Mail
+use_mac(action="mail.send", to="user@example.com", subject="Hello", body="Hi there!")
+use_mac(action="mail.unread")
+
+# Safari
+use_mac(action="safari.tabs")
+use_mac(action="safari.open", url="https://strandsagents.com")
+use_mac(action="safari.read")  # Read current page text
+
+# System
+use_mac(action="system.notify", text="Task complete!", title="DevDuck")
+use_mac(action="system.clipboard.get")
+use_mac(action="system.say", text="Hello world", voice="Samantha")
+use_mac(action="system.screenshot", path="/tmp/screenshot.png")
+use_mac(action="system.volume", level=50)
+use_mac(action="system.dark_mode", enable=True)
+
+# Finder
+use_mac(action="finder.selection")
+use_mac(action="finder.tag", path="/path/to/file", tags="important,review")
+
+# Messages & Music
+use_mac(action="messages.send", to="+1234567890", text="Hello!")
+use_mac(action="music.now_playing")
+
+# Keychain
+use_mac(action="keychain.get", service="MyApp", account="user@example.com")
+use_mac(action="keychain.set", service="MyApp", account="user@example.com", password="secret")
+
+# Shortcuts
+use_mac(action="shortcuts.run", name="My Shortcut", input_text="hello")
+
+# Raw AppleScript / JXA
+use_mac(action="applescript", script='tell app "Finder" to get name of every disk')
+use_mac(action="jxa", script='Application("System Events").currentUser().name()')
+```
+
+### Apple Notes
+
+```python
+# List & search
+apple_notes(action="list")
+apple_notes(action="list", folder="Work")
+apple_notes(action="search", query="meeting")
+
+# Create & edit
+apple_notes(action="create", title="Meeting Notes", body="## Agenda\n- Review Q1")
+apple_notes(action="edit", note_id="x-coredata://...", body="Updated content")
+apple_notes(action="append", note_id="x-coredata://...", body="\n## New section")
+
+# Organize & export
+apple_notes(action="move", note_id="x-coredata://...", target_folder="Archive")
+apple_notes(action="export", output_dir="/tmp/my_notes")
+apple_notes(action="folders")
+```
+
+---
+
+## Spotify Control
+
+Full Spotify playback, search, playlists, queue, library, and discovery control.
+
+```bash
+export SPOTIFY_CLIENT_ID="your-client-id"
+export SPOTIFY_CLIENT_SECRET="your-client-secret"
+```
+
+```python
+# Playback
+use_spotify(action="now_playing")
+use_spotify(action="play")
+use_spotify(action="pause")
+use_spotify(action="next")
+use_spotify(action="volume", volume=50)
+use_spotify(action="shuffle", shuffle_state=True)
+
+# Search & play
+use_spotify(action="search", query="Bohemian Rhapsody", search_type="track")
+use_spotify(action="queue.add", uri="spotify:track:...")
+
+# Playlists
+use_spotify(action="playlists")
+use_spotify(action="playlist.create", name="DevDuck Vibes", description="Coding music")
+use_spotify(action="playlist.add", playlist_id="...", uris="spotify:track:...,spotify:track:...")
+
+# Discovery
+use_spotify(action="top_tracks", time_range="short_term")
+use_spotify(action="recommendations", seed_genres="electronic,ambient", limit=10)
+use_spotify(action="recent")
+```
+
+---
+
+## JSON-RPC Client
+
+Generic JSON-RPC client supporting HTTP and WebSocket transports.
+
+```python
+# HTTP endpoint
+jsonrpc(method="getInfo", endpoint="https://api.example.com/rpc")
+
+# WebSocket endpoint
+jsonrpc(method="subscribe", endpoint="wss://api.example.com/ws")
+
+# With parameters
+jsonrpc(method="getData", params=["arg1", {"key": "value"}], endpoint="https://api.example.com/rpc")
+
+# With authentication (secure - uses env var)
+jsonrpc(method="getPrivateData", endpoint="https://api.example.com/rpc", auth_env_var="SERVICE_API_KEY", auth_type="Bearer")
+```
+
+---
+
+## Reinforcement Learning & ML Toolkit
+
+Train RL agents, run hyperparameter sweeps, fine-tune LLMs — all from DevDuck.
+
+```python
+# Train an RL agent
+rl(action="train", env_id="CartPole-v1", algorithm="PPO", total_timesteps=50000)
+
+# Evaluate a trained model
+rl(action="eval", env_id="CartPole-v1", model_path="rl_models/.../best_model")
+
+# Watch agent play (with video recording)
+rl(action="play", env_id="CartPole-v1", model_path="rl_models/.../best_model", record_video=True)
+
+# Hyperparameter sweep
+rl(action="sweep", env_id="LunarLander-v3", n_trials=8)
+
+# Create custom environment
+rl(action="create_env", env_name="my_env", reward_code="...", obs_dim=4, act_dim=2, act_type="discrete")
+
+# Fine-tune LLM with LoRA
+rl(action="finetune", model_id="Qwen/Qwen2.5-0.5B", dataset_id="tatsu-lab/alpaca", method="lora")
+
+# Supervised Fine-Tuning with TRL
+rl(action="sft", model_id="meta-llama/Llama-3.2-1B", dataset_path="./data.jsonl")
+
+# Inference on fine-tuned model
+rl(action="inference", model_path="./ml_models/my_model", prompt="Hello world")
+
+# List saved models
+rl(action="list_models")
+```
+
+---
+
 ## Advanced Features
 
 ### 🎬 Session Recording (Time-Travel Debugging)
@@ -912,9 +1160,9 @@ create_subagent(action="list", repository="owner/repo", workflow_id="agent.yml")
 ---
 
 <details>
-<summary><strong>📋 All Built-in Tools (46 total)</strong></summary>
+<summary><strong>📋 All Built-in Tools (54 total)</strong></summary>
 
-### DevDuck Core (25 tools)
+### DevDuck Core (33 tools)
 - `system_prompt` - Update agent's system prompt (GitHub sync support)
 - `store_in_kb` - Store content in Bedrock Knowledge Base
 - `state_manager` - Save/restore agent state (time-travel)
@@ -940,13 +1188,20 @@ create_subagent(action="list", repository="owner/repo", workflow_id="agent.yml")
 - `manage_tools` - Runtime tool add/remove/reload
 - `view_logs` - View/search/clear DevDuck logs
 - `speech_to_speech` - Real-time speech-to-speech conversations (optional - install with `pip install devduck[speech]`)
+- `use_mac` - 🍎 Unified macOS system control (Calendar, Reminders, Mail, Contacts, Safari, Finder, System Events, Shortcuts, Messages, Music, Keychain, AppleScript/JXA)
+- `apple_notes` - 📝 Apple Notes management (create, read, edit, delete, search, move, export)
+- `use_spotify` - 🎵 Full Spotify control (playback, search, playlists, queue, library, devices, discovery)
+- `telegram` - 💬 Telegram bot integration (listener, messaging, inline keyboards, polls, media)
+- `whatsapp` - 💬 WhatsApp integration via wacli (messaging, contacts, groups, media - no Cloud API needed)
+- `slack` - 💬 Slack integration (Socket Mode listener, messaging, reactions, file uploads)
+- `jsonrpc` - 🔌 Generic JSON-RPC client for any RPC service (HTTP & WebSocket transports)
+- `rl` - 🎮 Reinforcement Learning & ML toolkit (train/eval/play RL agents with Stable-Baselines3, fine-tune LLMs with LoRA/SFT)
 
 ### Strands Tools (13 tools)
 - `shell` - Interactive shell with PTY support
 - `editor` - File editing (view/create/replace/insert/undo)
 - `file_read` - Multi-file reading with search modes
 - `file_write` - Write content to files
-- `file_read` - Read files with document mode for PDFs/CSVs
 - `calculator` - SymPy-powered math (solve/derive/integrate)
 - `image_reader` - Read images for Converse API
 - `use_agent` - Nested agent with different model
@@ -955,7 +1210,6 @@ create_subagent(action="list", repository="owner/repo", workflow_id="agent.yml")
 - `mcp_client` - Connect to external MCP servers autonomously
 - `retrieve` - Bedrock Knowledge Base retrieval
 - `speak` - Text-to-speech (macOS `say` or AWS Polly)
-- `slack` - Slack messaging and event handling
 
 ### Strands Fun Tools (6 tools - macOS)
 - `listen` - Background speech transcription (Whisper)
@@ -1089,7 +1343,7 @@ devduck
 | `LITELLM_API_KEY` | - | LiteLLM API key (auto-detected) |
 | `LLAMAAPI_API_KEY` | - | LlamaAPI key (auto-detected) |
 | **Tools** | | |
-| `DEVDUCK_TOOLS` | 40 tools | Format: `package1:tool1,tool2;package2:tool3` |
+| `DEVDUCK_TOOLS` | 54 tools | Format: `package1:tool1,tool2;package2:tool3` |
 | `DEVDUCK_LOAD_TOOLS_FROM_DIR` | `false` | Auto-load from `./tools/` directory |
 | **Memory** | | |
 | `DEVDUCK_KNOWLEDGE_BASE_ID` | - | Bedrock KB ID for auto-RAG |
@@ -1119,6 +1373,18 @@ devduck
 | `DEVDUCK_AUTONOMOUS_COOLDOWN` | `10` | Seconds between autonomous runs |
 | **Speech** | | |
 | `BIDI_MODEL_ID` | Provider default | Override bidi model (e.g., `amazon.nova-2-sonic-v1:0`) |
+| **Messaging** | | |
+| `TELEGRAM_BOT_TOKEN` | - | Telegram bot token from @BotFather |
+| `STRANDS_TELEGRAM_AUTO_REPLY` | `false` | Enable auto-reply on Telegram |
+| `TELEGRAM_ALLOWED_USERS` | - | Comma-separated user IDs/usernames allowlist |
+| `SLACK_BOT_TOKEN` | - | Slack bot token (xoxb-...) |
+| `SLACK_APP_TOKEN` | - | Slack app token for Socket Mode (xapp-...) |
+| `STRANDS_SLACK_AUTO_REPLY` | `false` | Enable auto-reply on Slack |
+| `STRANDS_WHATSAPP_AUTO_REPLY` | `false` | Enable auto-reply on WhatsApp |
+| `WHATSAPP_ALLOWED_SENDERS` | - | Comma-separated phone/JID allowlist |
+| **Spotify** | | |
+| `SPOTIFY_CLIENT_ID` | - | Spotify client ID |
+| `SPOTIFY_CLIENT_SECRET` | - | Spotify client secret |
 | **Context** | | |
 | `DEVDUCK_LOG_LINE_COUNT` | `50` | Recent log lines in context |
 | `DEVDUCK_LAST_MESSAGE_COUNT` | `200` | Recent messages in context |

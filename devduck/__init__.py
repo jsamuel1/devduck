@@ -2024,6 +2024,12 @@ class DevDuck:
             # - state_manager: https://github.com/cagataycali/devduck/blob/main/devduck/tools/state_manager.py
             # - zenoh_peer: https://github.com/cagataycali/devduck/blob/main/devduck/tools/zenoh_peer.py
             # - ambient_mode: https://github.com/cagataycali/devduck/blob/main/devduck/tools/ambient_mode.py
+            # - telegram: https://github.com/cagataycali/devduck/blob/main/devduck/tools/telegram.py
+            # - slack: https://github.com/cagataycali/devduck/blob/main/devduck/tools/slack.py
+            # - whatsapp: https://github.com/cagataycali/devduck/blob/main/devduck/tools/whatsapp.py
+            # - apple_notes: https://github.com/cagataycali/devduck/blob/main/devduck/tools/apple_notes.py
+            # - use_mac: https://github.com/cagataycali/devduck/blob/main/devduck/tools/use_mac.py
+            # - use_spotify: https://github.com/cagataycali/devduck/blob/main/devduck/tools/use_spotify.py
 
             # 📦 Strands Tools
             # - editor, file_read, file_write, image_reader, load_tool, retrieve
