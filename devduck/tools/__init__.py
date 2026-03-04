@@ -25,6 +25,12 @@ from .use_github import use_github
 from .websocket import websocket
 from .zenoh_peer import zenoh_peer
 from .ambient_mode import ambient_mode
+from .listen import listen
+from .tasks import tasks
+from .use_computer import use_computer
+from .dialog import dialog
+from .sqlite_memory import sqlite_memory
+from .scheduler import scheduler
 
 # Optional Tools
 try:
@@ -53,6 +59,12 @@ try:
         "websocket",
         "zenoh_peer",
         "ambient_mode",
+        "listen",
+        "tasks",
+        "use_computer",
+        "dialog",
+        "sqlite_memory",
+        "scheduler",
     ]
 except ImportError:
     __all__ = [
@@ -77,4 +89,12 @@ except ImportError:
         "websocket",
         "zenoh_peer",
         "ambient_mode",
+        "listen",
+        "tasks",
+        "use_computer",
+        "dialog",
+        "sqlite_memory",
+        "scheduler",
+        "manage_messages",
+        "manage_tools",
     ]

@@ -49,6 +49,9 @@ dependencies = [
     "eclipse-zenoh",
     "halo",
     "strands-agents[bidi-all]",
+    "openai-whisper",
+    "webrtcvad",
+    "sounddevice",
 ]
 
 [project.optional-dependencies]

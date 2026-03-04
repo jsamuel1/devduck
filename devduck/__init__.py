@@ -25,6 +25,7 @@ from typing import Dict, Any, List, Optional, Callable
 from logging.handlers import RotatingFileHandler
 from strands import Agent, tool
 from .callback_handler import callback_handler
+from devduck.tools.manage_tools import manage_tools
 
 # Try to import dill for better serialization, fall back to pickle
 try:
@@ -416,7 +417,7 @@ class SessionRecorder:
             "tool.result",
             {
                 "name": tool_name,
-                "result_preview": str(result)[:500],
+                "result_preview": str(result),
                 "duration_ms": duration_ms,
             },
             trace_id,
@@ -429,7 +430,7 @@ class SessionRecorder:
         self.event_buffer.record(
             "agent",
             "message",
-            {"role": role, "content_preview": content[:500] if content else ""},
+            {"role": role, "content_preview": content if content else ""},
             trace_id,
         )
 
@@ -1127,183 +1128,6 @@ Last Modified: {modified}"""
         return {"status": "error", "content": [{"text": f"Error: {str(e)}"}]}
 
 
-def manage_tools_func(
-    action: str,
-    package: str = None,
-    tool_names: str = None,
-    tool_path: str = None,
-) -> Dict[str, Any]:
-    """Manage the agent's tool set at runtime - add, remove, list, reload tools on the fly."""
-    try:
-        if not hasattr(devduck, "agent") or not devduck.agent:
-            return {"status": "error", "content": [{"text": "Agent not initialized"}]}
-
-        registry = devduck.agent.tool_registry
-
-        if action == "list":
-            # List tools from registry
-            tool_list = list(registry.registry.keys())
-            dynamic_tools = list(registry.dynamic_tools.keys())
-
-            text = f"Currently loaded {len(tool_list)} tools:\n"
-            text += "\n".join(f"  • {t}" for t in sorted(tool_list))
-            if dynamic_tools:
-                text += f"\n\nDynamic tools ({len(dynamic_tools)}):\n"
-                text += "\n".join(f"  • {t}" for t in sorted(dynamic_tools))
-
-            return {"status": "success", "content": [{"text": text}]}
-
-        elif action == "add":
-            if not package and not tool_path:
-                return {
-                    "status": "error",
-                    "content": [
-                        {
-                            "text": "Either 'package' or 'tool_path' required for add action"
-                        }
-                    ],
-                }
-
-            added_tools = []
-
-            # Add from package using process_tools
-            if package:
-                if not tool_names:
-                    return {
-                        "status": "error",
-                        "content": [
-                            {"text": "'tool_names' required when adding from package"}
-                        ],
-                    }
-
-                tools_to_add = [t.strip() for t in tool_names.split(",")]
-
-                # Build tool specs: package.tool_name format
-                tool_specs = [f"{package}.{tool_name}" for tool_name in tools_to_add]
-
-                try:
-                    added_tool_names = registry.process_tools(tool_specs)
-                    added_tools.extend(added_tool_names)
-                    logger.info(f"Added tools from {package}: {added_tool_names}")
-                except Exception as e:
-                    logger.error(f"Failed to add tools from {package}: {e}")
-                    return {
-                        "status": "error",
-                        "content": [{"text": f"Failed to add tools: {str(e)}"}],
-                    }
-
-            # Add from file path using process_tools
-            if tool_path:
-                try:
-                    added_tool_names = registry.process_tools([tool_path])
-                    added_tools.extend(added_tool_names)
-                    logger.info(f"Added tools from file: {added_tool_names}")
-                except Exception as e:
-                    logger.error(f"Failed to add tool from {tool_path}: {e}")
-                    return {
-                        "status": "error",
-                        "content": [{"text": f"Failed to add tool: {str(e)}"}],
-                    }
-
-            if added_tools:
-                return {
-                    "status": "success",
-                    "content": [
-                        {
-                            "text": f"✅ Added {len(added_tools)} tools: {', '.join(added_tools)}\n"
-                            + f"Total tools: {len(registry.registry)}"
-                        }
-                    ],
-                }
-            else:
-                return {"status": "error", "content": [{"text": "No tools were added"}]}
-
-        elif action == "remove":
-            if not tool_names:
-                return {
-                    "status": "error",
-                    "content": [{"text": "'tool_names' required for remove action"}],
-                }
-
-            tools_to_remove = [t.strip() for t in tool_names.split(",")]
-            removed_tools = []
-
-            # Remove from registry
-            for tool_name in tools_to_remove:
-                if tool_name in registry.registry:
-                    del registry.registry[tool_name]
-                    removed_tools.append(tool_name)
-                    logger.info(f"Removed tool: {tool_name}")
-
-                if tool_name in registry.dynamic_tools:
-                    del registry.dynamic_tools[tool_name]
-                    logger.info(f"Removed dynamic tool: {tool_name}")
-
-            if removed_tools:
-                return {
-                    "status": "success",
-                    "content": [
-                        {
-                            "text": f"✅ Removed {len(removed_tools)} tools: {', '.join(removed_tools)}\n"
-                            + f"Total tools: {len(registry.registry)}"
-                        }
-                    ],
-                }
-            else:
-                return {
-                    "status": "success",
-                    "content": [{"text": "No tools were removed (not found)"}],
-                }
-
-        elif action == "reload":
-            if tool_names:
-                # Reload specific tools
-                tools_to_reload = [t.strip() for t in tool_names.split(",")]
-                reloaded_tools = []
-                failed_tools = []
-
-                for tool_name in tools_to_reload:
-                    try:
-                        registry.reload_tool(tool_name)
-                        reloaded_tools.append(tool_name)
-                        logger.info(f"Reloaded tool: {tool_name}")
-                    except Exception as e:
-                        failed_tools.append((tool_name, str(e)))
-                        logger.error(f"Failed to reload {tool_name}: {e}")
-
-                text = ""
-                if reloaded_tools:
-                    text += f"✅ Reloaded {len(reloaded_tools)} tools: {', '.join(reloaded_tools)}\n"
-                if failed_tools:
-                    text += f"❌ Failed to reload {len(failed_tools)} tools:\n"
-                    for tool_name, error in failed_tools:
-                        text += f"  • {tool_name}: {error}\n"
-
-                return {"status": "success", "content": [{"text": text}]}
-            else:
-                # Reload all tools - restart agent
-                logger.info("Reloading all tools via restart")
-                devduck.restart()
-                return {
-                    "status": "success",
-                    "content": [{"text": "✅ All tools reloaded - agent restarted"}],
-                }
-
-        else:
-            return {
-                "status": "error",
-                "content": [
-                    {
-                        "text": f"Unknown action: {action}. Valid: list, add, remove, reload"
-                    }
-                ],
-            }
-
-    except Exception as e:
-        logger.error(f"Error in manage_tools: {e}")
-        return {"status": "error", "content": [{"text": f"Error: {str(e)}"}]}
-
-
 def get_shell_history_file():
     """Get the devduck-specific history file path."""
     devduck_history = Path.home() / ".devduck_history"
@@ -1638,14 +1462,14 @@ class AmbientMode:
 
         # Configuration
         self.idle_threshold = float(os.getenv("DEVDUCK_AMBIENT_IDLE_SECONDS", "30"))
-        self.max_iterations = int(os.getenv("DEVDUCK_AMBIENT_MAX_ITERATIONS", "3"))
+        self.max_iterations = int(os.getenv("DEVDUCK_AMBIENT_MAX_ITERATIONS", "15"))
         self.cooldown = float(os.getenv("DEVDUCK_AMBIENT_COOLDOWN", "60"))
 
         # Autonomous mode settings
         self.autonomous = False
         self.autonomous_cooldown = float(os.getenv("DEVDUCK_AUTONOMOUS_COOLDOWN", "10"))
         self.autonomous_max_iterations = int(
-            os.getenv("DEVDUCK_AUTONOMOUS_MAX_ITERATIONS", "50")
+            os.getenv("DEVDUCK_AUTONOMOUS_MAX_ITERATIONS", "100")
         )
 
         # State
@@ -2004,32 +1828,7 @@ class DevDuck:
             # Default tool config
             # Agent can load additional tools on-demand via fetch_github_tool
 
-            # 🔧 Available DevDuck Tools (load on-demand):
-            # - system_prompt: https://github.com/cagataycali/devduck/blob/main/devduck/tools/system_prompt.py
-            # - store_in_kb: https://github.com/cagataycali/devduck/blob/main/devduck/tools/store_in_kb.py
-            # - ipc: https://github.com/cagataycali/devduck/blob/main/devduck/tools/ipc.py
-            # - tcp: https://github.com/cagataycali/devduck/blob/main/devduck/tools/tcp.py
-            # - websocket: https://github.com/cagataycali/devduck/blob/main/devduck/tools/websocket.py
-            # - mcp_server: https://github.com/cagataycali/devduck/blob/main/devduck/tools/mcp_server.py
-            # - scraper: https://github.com/cagataycali/devduck/blob/main/devduck/tools/scraper.py
-            # - tray: https://github.com/cagataycali/devduck/blob/main/devduck/tools/tray.py
-            # - ambient: https://github.com/cagataycali/devduck/blob/main/devduck/tools/ambient.py
-            # - agentcore_config: https://github.com/cagataycali/devduck/blob/main/devduck/tools/agentcore_config.py
-            # - agentcore_invoke: https://github.com/cagataycali/devduck/blob/main/devduck/tools/agentcore_invoke.py
-            # - agentcore_logs: https://github.com/cagataycali/devduck/blob/main/devduck/tools/agentcore_logs.py
-            # - agentcore_agents: https://github.com/cagataycali/devduck/blob/main/devduck/tools/agentcore_agents.py
-            # - create_subagent: https://github.com/cagataycali/devduck/blob/main/devduck/tools/create_subagent.py
-            # - use_github: https://github.com/cagataycali/devduck/blob/main/devduck/tools/use_github.py
-            # - speech_to_speech: https://github.com/cagataycali/devduck/blob/main/devduck/tools/speech_to_speech.py
-            # - state_manager: https://github.com/cagataycali/devduck/blob/main/devduck/tools/state_manager.py
-            # - zenoh_peer: https://github.com/cagataycali/devduck/blob/main/devduck/tools/zenoh_peer.py
-            # - ambient_mode: https://github.com/cagataycali/devduck/blob/main/devduck/tools/ambient_mode.py
-            # - telegram: https://github.com/cagataycali/devduck/blob/main/devduck/tools/telegram.py
-            # - slack: https://github.com/cagataycali/devduck/blob/main/devduck/tools/slack.py
-            # - whatsapp: https://github.com/cagataycali/devduck/blob/main/devduck/tools/whatsapp.py
-            # - apple_notes: https://github.com/cagataycali/devduck/blob/main/devduck/tools/apple_notes.py
-            # - use_mac: https://github.com/cagataycali/devduck/blob/main/devduck/tools/use_mac.py
-            # - use_spotify: https://github.com/cagataycali/devduck/blob/main/devduck/tools/use_spotify.py
+            # 🔧 Available DevDuck Tools (load on-demand from https://github.com/cagataycali/devduck/blob/main/devduck/tools/*.py): system_prompt,store_in_kb,ipc,tcp,websocket,mcp_server,scraper,tray,ambient,agentcore_config,agentcore_invoke,agentcore_logs,agentcore_agents,create_subagent,use_github,speech_to_speech,state_manager,zenoh_peer,ambient_mode,telegram,slack,whatsapp,apple_notes,use_mac,use_spotify
 
             # 📦 Strands Tools
             # - editor, file_read, file_write, image_reader, load_tool, retrieve
@@ -2057,10 +1856,10 @@ class DevDuck:
             # Append to default tools if any server tools are needed
             if server_tools_needed:
                 server_tools_str = ",".join(server_tools_needed)
-                default_tools = f"devduck.tools:system_prompt,fetch_github_tool,websocket,ambient_mode,{server_tools_str};strands_tools:shell"
+                default_tools = f"devduck.tools:system_prompt,fetch_github_tool,manage_tools,manage_messages,tasks,websocket,zenoh_peer,ambient_mode,{server_tools_str};strands_tools:shell"
                 logger.info(f"Auto-added server tools: {server_tools_str}")
             else:
-                default_tools = "devduck.tools:system_prompt,fetch_github_tool,websocket;strands_tools:shell"
+                default_tools = "devduck.tools:system_prompt,fetch_github_tool,manage_tools,manage_messages,websocket,zenoh_peer,ambient_mode;strands_tools:shell"
 
             tools_config = os.getenv("DEVDUCK_TOOLS", default_tools)
             logger.info(f"Loading tools from config: {tools_config}")
@@ -2075,28 +1874,6 @@ class DevDuck:
             ) -> Dict[str, Any]:
                 """View and manage DevDuck logs."""
                 return view_logs_tool(action, lines, pattern)
-
-            # Wrap manage_tools_func with @tool decorator
-            @tool
-            def manage_tools(
-                action: str,
-                package: str = None,
-                tool_names: str = None,
-                tool_path: str = None,
-            ) -> Dict[str, Any]:
-                """
-                Manage the agent's tool set at runtime using ToolRegistry.
-
-                Args:
-                    action: Action to perform - "list", "add", "remove", "reload"
-                    package: Package name to load tools from (e.g., "strands_tools", "strands_fun_tools") or "devduck.tools:speech_to_speech,system_prompt,..."
-                    tool_names: Comma-separated tool names (e.g., "shell,editor,calculator")
-                    tool_path: Path to a .py file to load as a tool
-
-                Returns:
-                    Dict with status and content
-                """
-                return manage_tools_func(action, package, tool_names, tool_path)
 
             # Session recorder tool
             @tool
@@ -2782,7 +2559,7 @@ When enabled, I continue working in the background while you're idle:
 
 ### 🚀 Autonomous Mode (Fully Self-Directed):
 Type `auto` or `autonomous` in REPL - I'll keep working until done:
-- **Max Iterations**: `DEVDUCK_AUTONOMOUS_MAX_ITERATIONS=50` (default: 50)
+- **Max Iterations**: `DEVDUCK_AUTONOMOUS_MAX_ITERATIONS=500` (default: 100)
 - **Cooldown**: `DEVDUCK_AUTONOMOUS_COOLDOWN=10` (default: 10s)
 - **Completion Signal**: Include `[AMBIENT_DONE]` in response to stop
 
@@ -3197,6 +2974,22 @@ How it works:
             if recorder and recorder.recording:
                 recorder.record_agent_message("error", str(e))
 
+            # 🧠 Context window overflow - drop history, retry with latest query only
+            error_str = str(e).lower()
+            if "trim conversation" in error_str or "context window" in error_str or "too many tokens" in error_str or "input is too long" in error_str:
+                logger.warning(f"Context window overflow detected - clearing message history and retrying")
+                print("🦆 Context window overflow - clearing history and retrying...")
+                try:
+                    if self.agent and hasattr(self.agent, "messages"):
+                        msg_count = len(self.agent.messages) if self.agent.messages else 0
+                        self.agent.messages.clear()
+                        logger.info(f"Cleared {msg_count} messages from history")
+                        print(f"🦆 Cleared {msg_count} messages. Retrying with fresh context...")
+                    return self.agent(original_query)
+                except Exception as retry_error:
+                    logger.error(f"Retry after context clear also failed: {retry_error}")
+                    return f"🦆 Error even after clearing history: {retry_error}"
+
             self._self_heal(e)
             if self.agent:
                 return self.agent(query)
@@ -3490,16 +3283,24 @@ def interactive():
     from prompt_toolkit.completion import WordCompleter
     from prompt_toolkit.history import FileHistory
 
-    print("🦆 DevDuck")
-    print(f"📝 Logs: {LOG_DIR}")
-    if devduck.ambient:
-        print(f"🌙 Ambient mode: ON (idle: {devduck.ambient.idle_threshold}s)")
-    recorder = get_session_recorder()
-    if recorder and recorder.recording:
-        print(f"🎬 Recording: ON ({recorder.session_id})")
-    print("Type 'exit', 'quit', or 'q' to quit.")
-    print("Commands: 'record' (toggle recording), 'ambient' (toggle), '!' (shell)")
-    print("\n\n")
+    # 🦆 Render beautiful landing UI
+    try:
+        from devduck.landing import render_landing
+        render_landing(devduck)
+    except Exception as e:
+        # Fallback to plain text if rich UI fails
+        logger.warning(f"Landing UI failed, using fallback: {e}")
+        print("🦆 DevDuck")
+        print(f"📝 Logs: {LOG_DIR}")
+        if devduck.ambient:
+            print(f"🌙 Ambient mode: ON (idle: {devduck.ambient.idle_threshold}s)")
+        recorder = get_session_recorder()
+        if recorder and recorder.recording:
+            print(f"🎬 Recording: ON ({recorder.session_id})")
+        print("Type 'exit', 'quit', or 'q' to quit.")
+        print("Commands: 'record' (toggle recording), 'ambient' (toggle), '!' (shell)")
+        print()
+
     logger.info("Interactive mode started")
 
     # Set up prompt_toolkit with history
@@ -4098,7 +3899,7 @@ AgentCore Deployment:
   devduck deploy --launch          # Configure AND launch
   devduck deploy --name my-agent   # Custom agent name
   devduck deploy --tools "strands_tools:shell,editor"
-  devduck deploy --model "us.anthropic.claude-opus-4-20250514-v1:0"
+  devduck deploy --model "global.anthropic.anthropic.claude-opus-4-6-v1"
   devduck deploy --system-prompt "You are a code reviewer"
   devduck deploy --idle-timeout 1800 --max-lifetime 43200
   devduck deploy --no-memory       # Disable AgentCore memory
