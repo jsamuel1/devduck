@@ -71,10 +71,14 @@
         }
 
         .hero .duck {
-            font-size: 8rem;
             margin-bottom: 1.5rem;
             filter: drop-shadow(0 0 60px rgba(139, 92, 246, 0.5));
             animation: float 3s ease-in-out infinite;
+        }
+
+        .hero .duck img {
+            width: 160px;
+            height: 160px;
         }
 
         @keyframes float {
@@ -535,6 +539,36 @@
             .quickstart { padding: 2rem 1.5rem; }
         }
 
+        /* Showcase */
+        .showcase {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3rem;
+            margin-top: 3rem;
+        }
+
+        .showcase-item {
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
+
+        .showcase-item img,
+        .showcase-item video {
+            width: 100%;
+            border-radius: 1rem;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .showcase-item .caption {
+            margin-top: 0.75rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
         /* Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-primary); }
@@ -564,7 +598,7 @@
     <!-- Hero -->
     <section class="hero">
         <div class="hero-content">
-            <div class="duck">🦆</div>
+            <div class="duck"><img src="duck-animated.svg" alt="DevDuck"></div>
             <h1>DevDuck</h1>
             <p class="tagline">Extreme minimalist self-adapting AI agent</p>
             
@@ -585,6 +619,22 @@
         </div>
         
         <div class="scroll-hint">↓ Scroll to explore</div>
+    </section>
+
+    <!-- Showcase -->
+    <section class="section" style="padding-top: 2rem;">
+        <div class="showcase">
+            <div class="showcase-item">
+                <img src="devduck-launcher.jpg" alt="DevDuck Launcher">
+                <p class="caption">DevDuck landing screen — your agent, ready to quack.</p>
+            </div>
+            <div class="showcase-item">
+                <video src="devduck-intro.mp4" controls autoplay muted loop playsinline>
+                    Your browser does not support the video tag.
+                </video>
+                <p class="caption">DevDuck in 90 seconds ▶</p>
+            </div>
+        </div>
     </section>
 
     <!-- Features -->
@@ -833,7 +883,7 @@ session.resume_from_snapshot(2, agent=devduck.agent)</code></pre>
 
     <!-- Footer -->
     <footer class="footer">
-        <div class="logo">🦆</div>
+        <div class="logo"><img src="duck.svg" alt="DevDuck" width="48" height="48"></div>
         <p>Extreme minimalist self-adapting agent</p>
         <div class="links">
             <a href="chat.html">Chat</a>
