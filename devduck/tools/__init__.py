@@ -14,6 +14,7 @@ from .create_subagent import create_subagent
 from .fetch_github_tool import fetch_github_tool
 from .install_tools import install_tools
 from .ipc import ipc
+from .lsp import lsp
 from .mcp_server import mcp_server
 from .scraper import scraper
 from .state_manager import state_manager
@@ -51,6 +52,7 @@ try:
         "fetch_github_tool",
         "install_tools",
         "ipc",
+        "lsp",
         "mcp_server",
         "scraper",
         "speech_to_speech",
@@ -86,6 +88,7 @@ except ImportError:
         "fetch_github_tool",
         "install_tools",
         "ipc",
+        "lsp",
         "mcp_server",
         "scraper",
         "state_manager",
