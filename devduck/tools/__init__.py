@@ -36,6 +36,7 @@ from .dialog import dialog
 from .manage_messages import manage_messages
 from .manage_tools import manage_tools
 from .rich_interface import rich_interface
+from .editor import editor
 
 # Optional Tools
 try:
@@ -75,6 +76,7 @@ try:
         "manage_messages",
         "manage_tools",
         "rich_interface",
+        "editor",
     ]
 except ImportError:
     __all__ = [
@@ -110,4 +112,5 @@ except ImportError:
         "manage_messages",
         "manage_tools",
         "rich_interface",
+        "editor",
     ]

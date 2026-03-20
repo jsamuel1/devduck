@@ -57,7 +57,6 @@ warnings.filterwarnings("ignore", message=".*cache_prompt is deprecated.*")
 
 os.environ["BYPASS_TOOL_CONSENT"] = os.getenv("BYPASS_TOOL_CONSENT", "true")
 os.environ["STRANDS_TOOL_CONSOLE_MODE"] = "enabled"
-os.environ["EDITOR_DISABLE_BACKUP"] = "true"
 
 LOG_DIR = Path(tempfile.gettempdir()) / "devduck" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -1837,8 +1836,8 @@ class DevDuck:
             # 🔧 Available DevDuck Tools (load on-demand from https://github.com/cagataycali/devduck/blob/main/devduck/tools/*.py): system_prompt,store_in_kb,ipc,tcp,websocket,mcp_server,scraper,tray,ambient,agentcore_config,agentcore_invoke,agentcore_logs,agentcore_agents,create_subagent,use_github,speech_to_speech,state_manager,zenoh_peer,ambient_mode,telegram,slack,whatsapp,apple_notes,use_mac,use_spotify
 
             # 📦 Strands Tools
-            # - editor, file_read, file_write, image_reader, load_tool, retrieve
-            # - calculator, use_agent, environment, mcp_client, speak, slack
+            # - file_read, file_write, image_reader, load_tool, retrieve
+            # - calculator, use_agent, environment, mcp_client, speak
 
             # 🎮 Strands Fun Tools
             # - listen, cursor, clipboard, screen_reader, bluetooth, yolo_vision
@@ -2146,7 +2145,7 @@ class DevDuck:
 
         Format: package1:tool1,tool2;package2:tool3,tool4
         Examples:
-          - strands_tools:shell,editor;strands_action:use_github
+          - strands_tools:shell;devduck:use_github
           - strands_action:use_github;strands_tools:shell,use_aws
 
         Note: Only loads what's specified in config - no automatic additions
@@ -2522,7 +2521,7 @@ You have full access to your own source code for self-awareness and self-modific
 ## Tool Configuration:
 Set DEVDUCK_TOOLS for custom tools:
 - Format: package1:tool1,tool2;package2:tool3,tool4
-- Example: strands_tools:shell,editor;strands_fun_tools:clipboard
+- Example: strands_tools:shell;strands_fun_tools:clipboard
 - Tools are filtered - only specified tools are loaded
 - Load the speech_to_speech tool when it's needed
 - Offload the tools when you don't need
@@ -3518,7 +3517,7 @@ def _deploy_to_agentcore(
 
     Args:
         name: Agent name (hyphens converted to underscores)
-        tools: Tool configuration (e.g., 'strands_tools:shell,editor')
+        tools: Tool configuration (e.g., 'strands_tools:shell')
         model: Model ID override
         region: AWS region
         auto_launch: Auto-launch after configure
@@ -3922,7 +3921,7 @@ AgentCore Deployment:
   devduck deploy                   # Configure agent (no launch)
   devduck deploy --launch          # Configure AND launch
   devduck deploy --name my-agent   # Custom agent name
-  devduck deploy --tools "strands_tools:shell,editor"
+  devduck deploy --tools "strands_tools:shell;devduck:use_github,editor"
   devduck deploy --model "global.anthropic.anthropic.claude-opus-4-6-v1"
   devduck deploy --system-prompt "You are a code reviewer"
   devduck deploy --idle-timeout 1800 --max-lifetime 43200
@@ -3933,7 +3932,7 @@ AgentCore Deployment:
 
 AgentCore Full Example:
   devduck deploy --name code-review-agent \\
-    --tools "strands_tools:shell,editor,file_read" \\
+    --tools "strands_tools:shell,file_read;devduck:use_github,editor,scheduler,tasks" \\
     --model "us.anthropic.claude-sonnet-4-20250514-v1:0" \\
     --system-prompt "You are a senior code reviewer" \\
     --no-memory --launch
@@ -3951,7 +3950,7 @@ Session Recording & Resume:
   Recordings saved to: /tmp/devduck/recordings/
 
 Tool Configuration:
-  export DEVDUCK_TOOLS="strands_tools:shell,editor:strands_fun_tools:clipboard"
+  export DEVDUCK_TOOLS="strands_tools:shell;strands_fun_tools:clipboard;devduck:use_github"
 
 Claude Desktop Config:
   {
@@ -3977,7 +3976,7 @@ Claude Desktop Config:
         "--tools",
         "-t",
         default=None,
-        help="Tool configuration (e.g., 'strands_tools:shell,editor')",
+        help="Tool configuration (e.g., 'strands_tools:shell,file_read;devduck:use_github')",
     )
     deploy_parser.add_argument(
         "--model", "-m", default=None, help="Model ID (default: claude-sonnet-4)"
