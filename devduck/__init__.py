@@ -2479,6 +2479,18 @@ class DevDuck:
             print(f"🦆 Warning: Could not load recent logs: {e}")
             recent_logs = ""
 
+        # Load AGENTS.md from cwd if it exists
+        agents_md_context = ""
+        try:
+            agents_md_path = Path(self.env_info['cwd']) / "AGENTS.md"
+            if agents_md_path.exists() and agents_md_path.is_file():
+                agents_md_content = agents_md_path.read_text(encoding="utf-8", errors="ignore")
+                if agents_md_content.strip():
+                    agents_md_context = f"\n\n## Project AGENTS.md ({agents_md_path}):\n{agents_md_content}\n"
+                    logger.info(f"Loaded AGENTS.md from {agents_md_path} ({len(agents_md_content)} chars)")
+        except Exception as e:
+            logger.debug(f"Could not load AGENTS.md: {e}")
+
         return f"""🦆 You are DevDuck - an extreme minimalist, self-adapting agent.
 
 Environment: {self.env_info['os']} {self.env_info['arch']} 
@@ -2499,7 +2511,7 @@ Current working directory: {self.env_info['cwd']}
 
 {recent_context}
 {recent_logs}
-
+{agents_md_context}
 ## Your Own Implementation:
 You have full access to your own source code for self-awareness and self-modification:
 
