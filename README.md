@@ -236,7 +236,69 @@ Cross-network: `ZENOH_CONNECT=tcp/remote:7447 devduck`
 
 ### Unified Mesh — everything connected
 
-Terminal DevDucks (Zenoh) + browser tabs (WebSocket) + AgentCore agents (AWS) share one ring context. Open `mesh.html` to join from a browser.
+The mesh is DevDuck's shared nervous system. Every agent — regardless of where it runs — sees what others are doing via a **ring context** (a shared circular buffer of recent activity).
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Unified Mesh (port 10000)                │
+│                                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
+│  │ Terminal  │  │ Terminal  │  │ Browser  │  │ AgentCore │  │
+│  │ DevDuck  │  │ DevDuck  │  │   Tab    │  │  (cloud)  │  │
+│  │ (Zenoh)  │  │ (Zenoh)  │  │  (WS)   │  │  (AWS)    │  │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └─────┬─────┘  │
+│       │              │              │               │       │
+│       └──────────────┴──────┬───────┴───────────────┘       │
+│                             │                               │
+│                    ┌────────▼────────┐                      │
+│                    │  Ring Context   │                      │
+│                    │ (shared memory) │                      │
+│                    │  last 100 msgs  │                      │
+│                    └─────────────────┘                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Four peer types, one network:**
+
+| Peer Type | Discovery | Transport | Example |
+|-----------|-----------|-----------|---------|
+| **Zenoh** | Multicast scouting (224.0.0.224:7446) | P2P UDP/TCP | Two terminal DevDucks auto-find each other |
+| **Browser** | WebSocket connect to :10000 | WS | `mesh.html` or custom web UI registers as peer |
+| **AgentCore** | AWS API (`ListAgentRuntimes`) | HTTPS | Cloud-deployed agents via `devduck deploy` |
+| **GitHub** | GitHub Actions API | HTTPS | Workflow-based agents from configured repos |
+
+**How it works:**
+
+1. **Registry** (`mesh_registry.py`) — File-based agent registry with TTL. Any process can read/write. Zenoh peers, browser tabs, and local agents all register here.
+
+2. **Ring Context** (`unified_mesh.py`) — In-memory circular buffer (last 100 entries). When any agent does something, it's pushed to the ring. CLI DevDuck injects ring context into every query so it knows what browser/cloud agents are doing.
+
+3. **Relay** (`agentcore_proxy.py`) — WebSocket server on port 10000 that bridges everything:
+   - Browser connects → gets real-time `ring_update` events
+   - Browser sends `invoke` → routes to Zenoh peer or AgentCore agent
+   - CLI writes to ring → browser gets notified instantly
+   - Handles `list_peers`, `invoke`, `broadcast`, `get_ring`, `add_ring`
+
+4. **Zenoh** (`zenoh_peer.py`) — P2P layer for terminal-to-terminal. Heartbeats every 5s, auto-prune stale peers, command execution on remote peers.
+
+**Ring context injection** — every CLI query automatically includes recent mesh activity:
+```
+[14:20:59] local:devduck-tui (local [tui]): Q: deploy API → Done ✅
+[14:21:05] browser:react-app (browser [ws]): Built component library
+[14:21:10] agentcore:reviewer (cloud [aws]): PR #42 approved
+```
+
+This means your terminal DevDuck is always aware of what your browser agent and cloud agents just did — no explicit sync needed.
+
+**WebSocket protocol** (port 10000):
+```json
+{"type": "list_peers"}                              // all peers across all layers
+{"type": "invoke", "peer_id": "...", "prompt": "..."} // invoke any peer
+{"type": "broadcast", "message": "..."}              // send to all Zenoh peers
+{"type": "get_ring", "max_entries": 20}              // recent activity
+{"type": "add_ring", "agent_id": "my-bot", "text": "done"}  // push to ring
+{"type": "register_browser_peer", "name": "my-ui", "model": "gpt-4o"}  // join mesh
+```
 
 ---
 
