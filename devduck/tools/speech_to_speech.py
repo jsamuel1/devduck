@@ -67,6 +67,8 @@ model_settings = {
 
 import os
 import asyncio
+import base64
+import queue
 import tempfile
 import json
 import logging
@@ -74,14 +76,29 @@ import threading
 import traceback
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+
+import numpy as np
+import pyaudio
 
 from strands import tool
 from strands.experimental.bidi.agent.agent import BidiAgent
 from strands.experimental.bidi.models.gemini_live import BidiGeminiLiveModel
 from strands.experimental.bidi.models.nova_sonic import BidiNovaSonicModel
 from strands.experimental.bidi.models.openai_realtime import BidiOpenAIRealtimeModel
-from strands.experimental.bidi.io.audio import BidiAudioIO
+from strands.experimental.bidi.io.audio import BidiAudioIO, _BidiAudioBuffer
+from strands.experimental.bidi.types.events import (
+    BidiAudioInputEvent,
+    BidiAudioStreamEvent,
+    BidiInterruptionEvent,
+    BidiConnectionCloseEvent,
+    BidiOutputEvent,
+    BidiTranscriptStreamEvent,
+)
+from strands.experimental.bidi.types.io import BidiInput, BidiOutput
+
+if TYPE_CHECKING:
+    from strands.experimental.bidi.agent.agent import BidiAgent as BidiAgentType
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +111,319 @@ BASE_DIR = Path(os.getenv("DEVDUCK_HOME", tempfile.gettempdir()))
 HISTORY_DIR = BASE_DIR / ".devduck" / "speech_sessions"
 HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
+# ── Audio constants ─────────────────────────────────────────────
+SAMPLE_RATE = 16000
+FRAME_SIZE = 160  # 10ms at 16kHz
+PYAUDIO_FRAMES_PER_BUFFER = 512
+
+# ── Optional pywebrtc-audio for AEC + noise suppression ────────
+_AudioProcessor = None
+_VoiceDetector = None
+try:
+    from pywebrtc_audio import AudioProcessor as _AudioProcessor, VoiceDetector as _VoiceDetector
+    _HAS_WEBRTC_AUDIO = True
+    logger.info("pywebrtc-audio loaded — AEC + noise suppression available")
+except ImportError:
+    _HAS_WEBRTC_AUDIO = False
+    logger.debug("pywebrtc-audio not installed — running without AEC/NS (pip install pywebrtc-audio)")
+
+
+# ═══════════════════════════════════════════════════════════════
+# Push-to-Talk Audio I/O with AEC + Noise Suppression + VAD
+# Inspired by Arron's pywebrtc-audio BidiProcessedAudioIO pattern
+# ═══════════════════════════════════════════════════════════════
+
+class _PTTAudioInput(BidiInput):
+    """Mic input with push-to-talk gate, echo cancellation, noise suppression, and VAD.
+
+    When the gate is closed, sends silence instead of mic audio.
+    When open, applies optional AEC (using speaker reference) + NS before sending.
+    Exposes speech_probability for live VAD metering.
+    """
+
+    def __init__(
+        self,
+        ap: Optional[Any],  # AudioProcessor or None
+        vd: Optional[Any],  # VoiceDetector or None
+        ref_buf: queue.Queue,
+        ptt_gate: threading.Event,
+        device_index: Optional[int] = None,
+    ):
+        self._ap = ap
+        self._vd = vd
+        self._ref_buf = ref_buf
+        self._ptt_gate = ptt_gate
+        self._device_index = device_index
+        self._buffer = _BidiAudioBuffer()
+        # Observable state for TUI
+        self.speech_probability: float = 0.0
+        self.is_transmitting: bool = False
+
+    async def start(self, agent: "BidiAgentType") -> None:
+        self._channels = agent.model.config["audio"]["channels"]
+        self._format = agent.model.config["audio"]["format"]
+        self._rate = agent.model.config["audio"]["input_rate"]
+
+        self._buffer.start()
+        self._audio = pyaudio.PyAudio()
+        self._stream = self._audio.open(
+            channels=self._channels,
+            format=pyaudio.paInt16,
+            frames_per_buffer=PYAUDIO_FRAMES_PER_BUFFER,
+            input=True,
+            input_device_index=self._device_index,
+            rate=self._rate,
+            stream_callback=self._callback,
+        )
+
+    async def stop(self) -> None:
+        if hasattr(self, "_stream"):
+            self._stream.close()
+        if hasattr(self, "_audio"):
+            self._audio.terminate()
+        self._buffer.stop()
+
+    async def __call__(self) -> BidiAudioInputEvent:
+        data = await asyncio.to_thread(self._buffer.get)
+        return BidiAudioInputEvent(
+            audio=base64.b64encode(data).decode("utf-8"),
+            channels=self._channels,
+            format=self._format,
+            sample_rate=self._rate,
+        )
+
+    def _callback(self, in_data: bytes, frame_count: int, *_: Any) -> tuple:
+        near = np.frombuffer(in_data, dtype=np.int16)
+
+        # ── VAD (always runs, even when gate closed) ──
+        if self._vd is not None:
+            try:
+                self.speech_probability = self._vd.process(near)
+            except Exception:
+                pass
+        elif self._ap is not None:
+            try:
+                self.speech_probability = self._ap.speech_probability
+            except Exception:
+                pass
+
+        # ── Push-to-talk gate ──
+        gate_open = self._ptt_gate.is_set()
+        self.is_transmitting = gate_open
+
+        if not gate_open:
+            # Gate closed → send silence
+            silence = np.zeros(len(near), dtype=np.int16)
+            self._buffer.put(silence.tobytes())
+            return (None, pyaudio.paContinue)
+
+        # ── AEC + noise suppression (when available) ──
+        if self._ap is not None:
+            try:
+                far_frame = self._ref_buf.get_nowait()
+            except queue.Empty:
+                far_frame = np.zeros(FRAME_SIZE, dtype=np.int16)
+            try:
+                processed = self._ap.process(near, far_frame)
+                self._buffer.put(processed.tobytes())
+            except Exception:
+                self._buffer.put(in_data)
+        else:
+            self._buffer.put(in_data)
+
+        return (None, pyaudio.paContinue)
+
+
+class _AECAudioOutput(BidiOutput):
+    """Speaker output that feeds reference frames for echo cancellation."""
+
+    def __init__(
+        self,
+        ref_buf: queue.Queue,
+        feed_ref: bool = True,
+        device_index: Optional[int] = None,
+    ):
+        self._ref_buf = ref_buf
+        self._feed_ref = feed_ref
+        self._device_index = device_index
+        self._buffer = _BidiAudioBuffer()
+
+    async def start(self, agent: "BidiAgentType") -> None:
+        self._channels = agent.model.config["audio"]["channels"]
+        self._rate = agent.model.config["audio"]["output_rate"]
+
+        self._buffer.start()
+        self._audio = pyaudio.PyAudio()
+        self._stream = self._audio.open(
+            channels=self._channels,
+            format=pyaudio.paInt16,
+            frames_per_buffer=PYAUDIO_FRAMES_PER_BUFFER,
+            output=True,
+            output_device_index=self._device_index,
+            rate=self._rate,
+            stream_callback=self._callback,
+        )
+
+    async def stop(self) -> None:
+        if hasattr(self, "_stream"):
+            self._stream.close()
+        if hasattr(self, "_audio"):
+            self._audio.terminate()
+        self._buffer.stop()
+
+    async def __call__(self, event: BidiOutputEvent) -> None:
+        if isinstance(event, BidiAudioStreamEvent):
+            self._buffer.put(base64.b64decode(event["audio"]))
+        elif isinstance(event, BidiInterruptionEvent):
+            self._buffer.clear()
+            # Flush reference queue to avoid stale AEC state
+            while not self._ref_buf.empty():
+                try:
+                    self._ref_buf.get_nowait()
+                except queue.Empty:
+                    break
+
+    def _callback(self, _in_data: None, frame_count: int, *_: Any) -> tuple:
+        byte_count = frame_count * pyaudio.get_sample_size(pyaudio.paInt16)
+        data = self._buffer.get(byte_count)
+
+        # Feed reference for echo cancellation
+        if self._feed_ref:
+            samples = np.frombuffer(data, dtype=np.int16)
+            # Feed in FRAME_SIZE chunks for proper AEC alignment
+            for i in range(0, len(samples), FRAME_SIZE):
+                chunk = samples[i:i + FRAME_SIZE]
+                if len(chunk) == FRAME_SIZE:
+                    self._ref_buf.put(chunk.copy())
+
+        return (data, pyaudio.paContinue)
+
+
+class _TranscriptOutput(BidiOutput):
+    """Routes transcript events to a callback for TUI rendering.
+
+    Captures both user and assistant transcripts and connection close events.
+    """
+
+    def __init__(self, callback: Optional[Callable[[str, str, bool], None]] = None):
+        """Args:
+            callback: func(role, text, is_final) called on each transcript event
+        """
+        self._callback = callback
+
+    async def __call__(self, event: BidiOutputEvent) -> None:
+        if isinstance(event, BidiTranscriptStreamEvent):
+            role = event["role"]
+            text = event["text"]
+            is_final = event["is_final"]
+            if self._callback:
+                self._callback(role, text, is_final)
+        elif isinstance(event, BidiConnectionCloseEvent):
+            if self._callback:
+                self._callback("system", "[connection closed]", True)
+        elif isinstance(event, BidiInterruptionEvent):
+            if self._callback:
+                self._callback("system", "[interrupted]", True)
+
+
+class PTTAudioIO:
+    """Push-to-talk audio I/O with optional WebRTC AEC + noise suppression.
+
+    Yoinks the core idea from Arron's pywebrtc-audio BidiProcessedAudioIO:
+    - Speaker output feeds reference frames into a queue
+    - Mic input consumes those frames for echo cancellation
+    - AudioProcessor runs AEC3 + noise suppression in one pass
+    - VoiceDetector provides speech probability for VAD metering
+
+    Adds:
+    - Push-to-talk gate (threading.Event) — silence when closed
+    - Graceful fallback when pywebrtc-audio not installed
+    - Transcript output routing for TUI integration
+    """
+
+    def __init__(
+        self,
+        ptt_gate: threading.Event,
+        echo_cancellation: bool = True,
+        noise_suppression: bool = True,
+        input_device_index: Optional[int] = None,
+        output_device_index: Optional[int] = None,
+        transcript_callback: Optional[Callable[[str, str, bool], None]] = None,
+    ):
+        self._ptt_gate = ptt_gate
+        self._ref_buf: queue.Queue = queue.Queue()
+        self._input_device_index = input_device_index
+        self._output_device_index = output_device_index
+        self._transcript_callback = transcript_callback
+
+        # Create AudioProcessor if pywebrtc-audio is available
+        self._ap = None
+        self._vd = None
+        self._has_aec = False
+
+        if _HAS_WEBRTC_AUDIO and (echo_cancellation or noise_suppression):
+            try:
+                self._ap = _AudioProcessor(
+                    sample_rate=SAMPLE_RATE,
+                    echo_cancellation=echo_cancellation,
+                    noise_suppression=noise_suppression,
+                    stream_delay_ms=int(PYAUDIO_FRAMES_PER_BUFFER / SAMPLE_RATE * 1000),
+                )
+                self._has_aec = echo_cancellation
+                # Standalone VAD for when AP is not processing (gate closed)
+                self._vd = _VoiceDetector(sample_rate=SAMPLE_RATE)
+                logger.info(f"WebRTC audio: AEC={echo_cancellation}, NS={noise_suppression}")
+            except Exception as e:
+                logger.warning(f"Failed to create AudioProcessor: {e}")
+                self._ap = None
+                self._vd = None
+
+        # The input instance — stored for external state access
+        self._audio_input: Optional[_PTTAudioInput] = None
+
+    def input(self) -> _PTTAudioInput:
+        self._audio_input = _PTTAudioInput(
+            ap=self._ap,
+            vd=self._vd,
+            ref_buf=self._ref_buf,
+            ptt_gate=self._ptt_gate,
+            device_index=self._input_device_index,
+        )
+        return self._audio_input
+
+    def output(self) -> _AECAudioOutput:
+        return _AECAudioOutput(
+            ref_buf=self._ref_buf,
+            feed_ref=self._has_aec,
+            device_index=self._output_device_index,
+        )
+
+    def transcript_output(self) -> _TranscriptOutput:
+        return _TranscriptOutput(callback=self._transcript_callback)
+
+    @property
+    def speech_probability(self) -> float:
+        """Current speech probability (0.0-1.0) from VAD."""
+        if self._audio_input:
+            return self._audio_input.speech_probability
+        return 0.0
+
+    @property
+    def is_transmitting(self) -> bool:
+        """Whether the PTT gate is open and mic is transmitting."""
+        return self._ptt_gate.is_set()
+
 
 class SpeechSession:
-    """Manages a speech-to-speech conversation session with full lifecycle management."""
+    """Manages a speech-to-speech conversation session with full lifecycle management.
+
+    Supports two modes:
+    - **Always-on** (default): mic always hot, natural conversation
+    - **Push-to-talk**: mic gated by external control (e.g., hold Space in TUI)
+
+    Features AEC + noise suppression via pywebrtc-audio when available,
+    live VAD probability for UI metering, and transcript routing.
+    """
 
     def __init__(
         self,
@@ -104,104 +431,123 @@ class SpeechSession:
         agent: BidiAgent,
         input_device_index: Optional[int] = None,
         output_device_index: Optional[int] = None,
+        push_to_talk: bool = False,
+        echo_cancellation: bool = True,
+        noise_suppression: bool = True,
+        transcript_callback: Optional[Callable[[str, str, bool], None]] = None,
     ):
-        """Initialize speech session.
-
-        Args:
-            session_id: Unique session identifier
-            agent: BidiAgent instance
-            input_device_index: PyAudio input device index
-            output_device_index: PyAudio output device index
-        """
         self.session_id = session_id
         self.agent = agent
         self.input_device_index = input_device_index
         self.output_device_index = output_device_index
+        self.push_to_talk = push_to_talk
+        self.echo_cancellation = echo_cancellation
+        self.noise_suppression = noise_suppression
+        self.transcript_callback = transcript_callback
         self.active = False
         self.thread = None
         self.loop = None
         self.history_file = HISTORY_DIR / f"{session_id}.json"
 
+        # Push-to-talk gate: set = mic open, clear = mic muted
+        self.ptt_gate = threading.Event()
+        if not push_to_talk:
+            self.ptt_gate.set()  # Always-on mode
+
+        # Audio I/O instance (set during _async_session)
+        self._audio_io: Optional[PTTAudioIO] = None
+
     def start(self) -> None:
-        """Start the speech session in background thread."""
         if self.active:
             raise ValueError("Session already active")
-
         self.active = True
         self.thread = threading.Thread(target=self._run_session, daemon=True)
         self.thread.start()
 
     def stop(self) -> None:
-        """Stop the speech session and cleanup resources."""
         if not self.active:
             return
-
         self.active = False
 
-        # Stop the bidi agent using its event loop
         if self.loop and self.loop.is_running():
-            # Schedule stop in the session's event loop and wait for it
             future = asyncio.run_coroutine_threadsafe(self.agent.stop(), self.loop)
             try:
-                # Wait up to 3 seconds for stop to complete
                 future.result(timeout=3.0)
-                logger.info(
-                    f"Successfully stopped bidi agent for session {self.session_id}"
-                )
+                logger.info(f"Stopped bidi agent for session {self.session_id}")
             except Exception as e:
                 logger.warning(f"Error stopping bidi agent: {e}")
 
         if self.thread:
             self.thread.join(timeout=5.0)
-
-        # Save conversation history after session ends
         self._save_history()
 
+    # ── PTT controls ────────────────────────────────────────────
+
+    def mic_on(self) -> None:
+        """Open the mic gate (push-to-talk press)."""
+        self.ptt_gate.set()
+
+    def mic_off(self) -> None:
+        """Close the mic gate (push-to-talk release)."""
+        self.ptt_gate.clear()
+
+    @property
+    def speech_probability(self) -> float:
+        """Current VAD speech probability (0.0-1.0)."""
+        if self._audio_io:
+            return self._audio_io.speech_probability
+        return 0.0
+
+    @property
+    def is_transmitting(self) -> bool:
+        """Whether mic is currently transmitting audio."""
+        return self.ptt_gate.is_set()
+
+    # ── Internals ───────────────────────────────────────────────
+
     def _save_history(self) -> None:
-        """Save conversation history to file."""
         try:
             history_data = {
                 "session_id": self.session_id,
                 "timestamp": datetime.now().isoformat(),
                 "messages": self.agent.messages,
             }
-
             with open(self.history_file, "w") as f:
                 json.dump(history_data, f, indent=2)
-
             logger.info(f"Saved conversation history to {self.history_file}")
         except Exception as e:
             logger.error(f"Failed to save history: {e}")
 
     def _run_session(self) -> None:
-        """Main session runner in background thread."""
         try:
-            # Create event loop for this thread
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
-
-            # Run the async session
             self.loop.run_until_complete(self._async_session())
         except Exception as e:
-            error_msg = f"Session error: {e}\n{traceback.format_exc()}"
-            logger.debug(error_msg)
+            logger.debug(f"Session error: {e}\n{traceback.format_exc()}")
             print(f"\n🦆 Session error: {e}")
         finally:
             if self.loop:
                 self.loop.close()
 
     async def _async_session(self) -> None:
-        """Async session management using BidiAudioIO."""
+        """Async session with PTT audio I/O + AEC + transcript routing."""
         try:
-            # Create audio I/O with device indices
-            audio_io = BidiAudioIO(
+            self._audio_io = PTTAudioIO(
+                ptt_gate=self.ptt_gate,
+                echo_cancellation=self.echo_cancellation,
+                noise_suppression=self.noise_suppression,
                 input_device_index=self.input_device_index,
                 output_device_index=self.output_device_index,
+                transcript_callback=self.transcript_callback,
             )
 
-            # Run agent with audio I/O
-            await self.agent.run(inputs=[audio_io.input()], outputs=[audio_io.output()])
+            outputs = [self._audio_io.output(), self._audio_io.transcript_output()]
 
+            await self.agent.run(
+                inputs=[self._audio_io.input()],
+                outputs=outputs,
+            )
         except Exception as e:
             logger.debug(f"Async session error: {e}\n{traceback.format_exc()}")
 
@@ -392,6 +738,10 @@ def _start_speech_session(
     inherit_system_prompt: bool,
     input_device_index: Optional[int],
     output_device_index: Optional[int],
+    push_to_talk: bool = False,
+    echo_cancellation: bool = True,
+    noise_suppression: bool = True,
+    transcript_callback: Optional[Callable[[str, str, bool], None]] = None,
 ) -> str:
     """Start a speech-to-speech session with full configuration support."""
     try:
@@ -617,6 +967,10 @@ Keep your voice responses brief and natural."""
             agent=bidi_agent,
             input_device_index=input_device_index,
             output_device_index=output_device_index,
+            push_to_talk=push_to_talk,
+            echo_cancellation=echo_cancellation,
+            noise_suppression=noise_suppression,
+            transcript_callback=transcript_callback,
         )
 
         session.start()

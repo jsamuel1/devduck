@@ -31,6 +31,7 @@ Learn more: https://dev.duck.nyc
 | Feature | What You'll See | Demo |
 |---------|----------------|-------|
 | 🔥 **Hot-Reload** | Agent detects code changes and restarts instantly | [Watch](https://redduck.dev/videos/hot-reload.mp4) |
+| 🖥️ **TUI Mode** | Multi-conversation Textual UI with streaming markdown | `devduck --tui` |
 | 🌐 **Web UI** | Clean web interface with real-time streaming | [Watch](https://redduck.dev/videos/web-ui.mp4) |
 | 🛠️ **Dynamic Tools** | Save `.py` file in `./tools/` → use instantly | [Watch](https://redduck.dev/videos/dynamic-tool-creation.mp4) |
 | 🌊 **TCP Streaming** | Connect via netcat, apps, or other agents | [Watch](https://redduck.dev/videos/tcp.mp4) |
@@ -40,7 +41,6 @@ Learn more: https://dev.duck.nyc
 | 🌙 **Ambient Mode** | Background thinking while you're idle | Auto-explores topics 🧠 |
 | 🔌 **IPC & Tray** | macOS menu bar + Unix socket IPC | ![Demo](docs/mac-os-tray.jpg) |
 | 💬 **Ambient Overlay** | Floating AI input with glassmorphism UI | [Watch](https://redduck.dev/videos/floating-input.mp4) |
-
 | 🌐 **Unified Mesh** | Connect CLI + browser + cloud agents in one mesh | All agents, one network 🕸️ |
 | ☁️ **Deploy CLI** | `devduck deploy --launch` to AgentCore | One-command cloud deploy 🚀 |
 | 🧩 **Browser Peers** | Browser tabs join the mesh as first-class peers | Open mesh.html to join 🌍 |
@@ -57,8 +57,8 @@ Learn more: https://dev.duck.nyc
 # Install & run
 pipx install devduck && devduck
 
-# With speech-to-speech capabilities (optional)
-pipx install "devduck[speech]" && devduck
+# Multi-conversation TUI (concurrent panels, streaming markdown)
+devduck --tui
 
 # One-shot query
 devduck "create a REST API with FastAPI"
@@ -83,10 +83,7 @@ devduck deploy --launch
 devduck deploy --name my-agent --tools "strands_tools:shell,editor" --launch
 ```
 
-**Requirements:** Python 3.10-3.13, AWS credentials (or Ollama/Anthropic/GitHub/MLX)
-
-**Optional extras:**
-- `devduck[speech]` - Real-time speech-to-speech conversations (Nova Sonic, OpenAI Realtime, Gemini Live)
+**Requirements:** Python 3.10-3.13, AWS credentials (or Ollama/Anthropic/OpenAI/GitHub/Gemini/MLX)
 
 ---
 
@@ -95,9 +92,11 @@ devduck deploy --name my-agent --tools "strands_tools:shell,editor" --launch
 | Feature | What It Does | How to Use |
 |---------|--------------|------------|
 | 🔥 **Hot-Reload** | Auto-restarts on code changes | Edit `__init__.py` → saves → auto-restart |
+| 🖥️ **TUI Mode** | Multi-conversation concurrent terminal UI | `devduck --tui` |
 | 🛠️ **Runtime Tools** | Add/remove tools without restart | `manage_tools(action="add", ...)` |
 | 📦 **Dynamic Loading** | Install packages and load tools on-the-fly | `install_tools(action="install_and_load", package="...")` |
 | 🧠 **Auto-RAG** | Remembers conversations via Knowledge Base | Set `DEVDUCK_KNOWLEDGE_BASE_ID` |
+| 🧠 **SQLite Memory** | Persistent local memory with full-text search | `sqlite_memory(action="store", content="...")` |
 | 🌊 **Multi-Protocol** | TCP, WebSocket, MCP, IPC servers | Auto-starts on ports 10001, 10002, 10003 |
 | 🔗 **Zenoh P2P** | Auto-discover & coordinate with other DevDucks | `zenoh_peer(action="broadcast", message="...")` |
 | 🌐 **Unified Mesh** | Connect CLI + browser + cloud agents | Auto-starts relay on port 10000 |
@@ -107,9 +106,16 @@ devduck deploy --name my-agent --tools "strands_tools:shell,editor" --launch
 | 🎥 **Asciinema Recording** | Record terminal output as `.cast` files | `DEVDUCK_ASCIINEMA=true devduck` |
 | 💾 **State Time-Travel** | Save/restore agent state | `state_manager(action="export")` |
 | 🌙 **Ambient Mode** | Background thinking when idle | `DEVDUCK_AMBIENT_MODE=true` or type `ambient` |
+| ⏰ **Job Scheduler** | Cron and one-time scheduled agent tasks | `scheduler(action="add", name="...", schedule="...")` |
+| 📋 **Background Tasks** | Parallel agent tasks in separate threads | `tasks(action="create", prompt="...")` |
+| 💬 **Interactive Dialogs** | Rich terminal UI dialogs (forms, pickers) | `dialog(dialog_type="input", text="...")` |
+| 🔔 **Notifications** | Native OS notifications (macOS, terminal, TUI) | `notify(title="Done", message="Task complete")` |
+| 🖥️ **Computer Control** | Mouse, keyboard, screenshots, scrolling | `use_computer(action="screenshot")` |
+| 🎤 **Speech Listener** | Background Whisper transcription | `listen(action="start")` |
+| 🔍 **LSP Integration** | Real-time code diagnostics from language servers | `lsp(action="diagnostics", file_path="...")` |
+| 📝 **AGENTS.md** | Auto-loads project context from `AGENTS.md` | Place `AGENTS.md` in working directory |
 | 📝 **Self-Improvement** | Updates own system prompt | `system_prompt(action="add_context", ...)` |
 | ☁️ **AWS Deploy** | One-command serverless | `devduck deploy --launch` |
-| 🎤 **Speech-to-Speech** | Real-time voice conversations | `pip install devduck[speech]` |
 | 🍎 **macOS Control** | Calendar, Mail, Safari, Finder, System, Keychain & more | `use_mac(action="calendar.events")` |
 | 📝 **Apple Notes** | Create, edit, search, export notes | `apple_notes(action="list")` |
 | 🎵 **Spotify** | Full playback, search, playlists, discovery | `use_spotify(action="now_playing")` |
@@ -118,6 +124,8 @@ devduck deploy --name my-agent --tools "strands_tools:shell,editor" --launch
 | 💬 **Slack** | Socket Mode listener + messaging | `slack(action="start_listener")` |
 | 🔌 **JSON-RPC** | Generic RPC client (HTTP & WebSocket) | `jsonrpc(method="getInfo", endpoint="...")` |
 | 🎮 **RL/ML Toolkit** | Train RL agents, fine-tune LLMs | `rl(action="train", env_id="CartPole-v1")` |
+| 🎤 **Speech-to-Speech** | Real-time voice conversations | Nova Sonic, OpenAI Realtime, Gemini Live |
+| 🧩 **Apple Silicon** | On-device NLP, Vision OCR, sensors, WiFi, SMC | `apple_nlp(action="sentiment", text="...")` |
 
 ---
 
@@ -129,11 +137,8 @@ cd devduck
 python3.13 -m venv .venv
 source .venv/bin/activate
 
-# Basic install
+# Install
 .venv/bin/pip3.13 install -e .
-
-# With speech capabilities
-.venv/bin/pip3.13 install -e ".[speech]"
 
 devduck
 ```
@@ -144,17 +149,19 @@ devduck
 
 ```mermaid
 graph TB
-    A[User Input] -->|CLI/TCP/WS/MCP/IPC| B[DevDuck Core]
+    A[User Input] -->|CLI/TUI/TCP/WS/MCP/IPC| B[DevDuck Core]
     B -->|Auto RAG| C[Knowledge Base]
     C -.->|Context Retrieval| B
-    B -->|Tool Calls| D[54+ Built-in Tools]
+    B -->|Tool Calls| D[60+ Built-in Tools]
     D --> E[shell/editor/calculator]
     D --> F[GitHub/AgentCore]
     D --> G[TCP/WebSocket/MCP/IPC]
-    D --> H[tray/ambient/cursor/clipboard]
+    D --> H[tray/ambient/dialog/notify]
     D --> O[Telegram/WhatsApp/Slack]
     D --> P[use_mac/apple_notes/spotify]
     D --> Q[rl/jsonrpc/scraper]
+    D --> R[scheduler/tasks/sqlite_memory]
+    D --> S[listen/lsp/use_computer]
     B -->|Hot-reload| I[./tools/*.py + __init__.py]
     I -.->|Load Instantly| D
     B -->|Runtime| K[manage_tools/install_tools]
@@ -164,6 +171,7 @@ graph TB
     B <-->|Unified Mesh| M[Browser Peers + AgentCore]
     M -.->|Ring Context| B
     B -->|Deploy| N[devduck deploy → AgentCore]
+    B -->|AGENTS.md| T[Project Context Auto-Load]
     B -->|Response| J[User Output]
     J -.->|Store Memory| C
     
@@ -176,6 +184,33 @@ graph TB
 ```
 
 **Self-adapting loop:** Query → RAG → Tools → Response → Memory → Hot-reload/Runtime-load → Repeat
+
+---
+
+## TUI Mode (Multi-Conversation)
+
+Launch a full **Textual-based terminal UI** with concurrent interleaved conversations:
+
+```bash
+devduck --tui
+```
+
+**Features:**
+- **Multiple conversations** running in parallel with color-coded panels
+- **Streaming markdown** rendering (tables, code blocks, lists)
+- **Tool call tracking** with icons and timing
+- **Collapsible panels** — click header to toggle
+- **Zenoh peer sidebar** with live updates
+- **Slash commands**: `/clear`, `/status`, `/peers`, `/tools`, `/help`
+- **Keyboard shortcuts**: `Ctrl+L` (clear), `Ctrl+K` (focus), `Ctrl+T` (toggle sidebar)
+- **Agent can push content** to the TUI via the `tui()` tool
+
+```python
+# Agent-side: push rich content to TUI
+tui(action="panel", content="## Analysis\nResults here...", title="Report")
+tui(action="notify", content="Task complete!", style="green")
+tui(action="status", content="Processing 3/10 files...")
+```
 
 ---
 
@@ -197,7 +232,7 @@ DevDuck **auto-detects** providers based on credentials:
 | **Mistral** | `MISTRAL_API_KEY` | ✅ If key present |
 | **LiteLLM** | `LITELLM_API_KEY` | ✅ If key present |
 | **LlamaAPI** | `LLAMAAPI_API_KEY` | ✅ If key present |
-| **MLX** | No key needed | ✅ On Apple Silicon (M1/M2/M3) |
+| **MLX** | No key needed | ✅ On Apple Silicon (M1/M2/M3/M4) |
 | **Ollama** | No key needed | ✅ Fallback if nothing else found |
 
 **Just set your API key - DevDuck handles the rest:**
@@ -232,19 +267,23 @@ Add, remove, or reload tools while agent is running:
 manage_tools(action="list")
 
 # Add tools from a package at runtime
-manage_tools(action="add", package="strands_fun_tools", tool_names="cursor,clipboard,bluetooth")
+manage_tools(action="add", tools="strands_fun_tools.cursor,strands_fun_tools.clipboard")
 
-# Remove tools you don't need
-manage_tools(action="remove", tool_names="cursor,clipboard")
+# Create a tool on the fly
+manage_tools(action="create", code='''
+from strands import tool
 
-# Reload specific tools after editing
-manage_tools(action="reload", tool_names="shell,editor")
+@tool
+def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}!"
+''')
 
-# Reload all tools (restarts agent)
-manage_tools(action="reload")
+# Fetch and load a tool from GitHub
+manage_tools(action="fetch", url="https://github.com/user/repo/blob/main/my_tool.py")
 
-# Load custom tool from file
-manage_tools(action="add", tool_path="./my_custom_tool.py")
+# Discover tools in a package
+manage_tools(action="discover", tools="strands_tools", verbose=True)
 ```
 
 ### Dynamic Package Installation
@@ -315,12 +354,371 @@ devduck
 
 ---
 
-## Speech-to-Speech (Optional)
+## New Tools
 
-**Install speech capabilities:**
-```bash
-pip install "devduck[speech]"
+### ⏰ Job Scheduler
+
+Cron-based and one-time job scheduling with disk persistence:
+
+```python
+# Start the scheduler daemon
+scheduler(action="start")
+
+# Add a cron job (every 6 hours)
+scheduler(action="add", name="backup", schedule="0 */6 * * *", prompt="Run backup check")
+
+# Add a one-time job
+scheduler(action="add", name="remind", run_at="2026-03-04T15:00:00", prompt="Remind about meeting")
+
+# List all jobs
+scheduler(action="list")
+
+# View execution history
+scheduler(action="history", name="backup")
+
+# Run a job immediately
+scheduler(action="run_now", name="backup")
 ```
+
+### 📋 Background Tasks
+
+Run parallel agent tasks in separate threads:
+
+```python
+# Create a background task
+tasks(action="create", task_id="research", prompt="Research quantum computing", system_prompt="You are a researcher")
+
+# Check status
+tasks(action="status", task_id="research")
+
+# Send follow-up messages
+tasks(action="add_message", task_id="research", message="Focus on healthcare applications")
+
+# Get result
+tasks(action="get_result", task_id="research")
+
+# List all tasks
+tasks(action="list")
+```
+
+### 🧠 SQLite Memory
+
+Persistent local memory with full-text search, tagging, and metadata:
+
+```python
+# Store a memory
+sqlite_memory(action="store", content="Important finding about X", title="Research", tags=["research", "x"])
+
+# Full-text search
+sqlite_memory(action="search", query="important finding")
+
+# List recent memories
+sqlite_memory(action="list", limit=5)
+
+# Raw SQL access
+sqlite_memory(action="sql", sql_query="SELECT COUNT(*) FROM memories")
+
+# Export
+sqlite_memory(action="export", export_format="json")
+
+# Stats
+sqlite_memory(action="stats")
+```
+
+### 💬 Interactive Dialogs
+
+Rich terminal UI dialogs using prompt_toolkit:
+
+```python
+# Text input
+dialog(dialog_type="input", text="What's your name?", title="Name")
+
+# Yes/No confirmation
+dialog(dialog_type="yes_no", text="Deploy to production?", title="Confirm")
+
+# Radio selection
+dialog(dialog_type="radio", text="Pick a color:", options=[["red", "Red"], ["blue", "Blue"]])
+
+# Multi-select checkbox
+dialog(dialog_type="checkbox", text="Select features:", options=[["auth", "Auth"], ["api", "API"]])
+
+# Multi-field form
+dialog(dialog_type="form", text="User details:", form_fields=[
+    {"name": "email", "label": "Email"},
+    {"name": "role", "label": "Role", "default": "developer"}
+])
+
+# File picker
+dialog(dialog_type="file", text="Select a file:", path_filter="*.py")
+
+# Password input
+dialog(dialog_type="password", text="Enter password:")
+```
+
+### 🔔 Notifications
+
+Native notifications across platforms:
+
+```python
+# macOS notification (uses terminal-notifier or osascript)
+notify(title="Build Complete", message="All tests passed!", sound="default")
+
+# With URL action
+notify(title="PR Merged", message="Click to view", url="https://github.com/...")
+
+# Speech notification
+notify(title="Alert", message="Deployment started", method="speech")
+```
+
+### 🖥️ Computer Control
+
+Mouse, keyboard, screenshots, and app switching:
+
+```python
+# Take screenshot
+use_computer(action="screenshot")
+
+# Click at position
+use_computer(action="click", x=500, y=300)
+
+# Type text
+use_computer(action="type", text="Hello world")
+
+# Keyboard shortcuts
+use_computer(action="hotkey", keys=["cmd", "c"])
+
+# Scroll
+use_computer(action="scroll", direction="down", clicks=5)
+
+# Drag
+use_computer(action="drag", x=100, y=100, to_x=500, to_y=500)
+
+# Switch app
+use_computer(action="switch_app", app_name="Safari")
+
+# Get screen size
+use_computer(action="screen_size")
+```
+
+### 🎤 Background Speech Listener
+
+Background audio capture with Whisper transcription:
+
+```python
+# Start listening (uses default microphone)
+listen(action="start", model_name="base")
+
+# Start with trigger keyword
+listen(action="start", trigger_keyword="hey duck")
+
+# Start in auto mode (triggers on long speech)
+listen(action="start", auto_mode=True, length_threshold=50)
+
+# Check status
+listen(action="status")
+
+# Get transcripts
+listen(action="get_transcripts", limit=10)
+
+# List audio devices
+listen(action="list_devices")
+
+# Stop
+listen(action="stop")
+```
+
+### 🔍 LSP Integration
+
+Real-time code diagnostics from language servers (pyright, typescript-language-server, gopls, rust-analyzer, clangd):
+
+```python
+# Get diagnostics for a file
+lsp(action="diagnostics", file_path="main.py")
+
+# Go to definition
+lsp(action="definition", file_path="main.py", line=10, character=5)
+
+# Find references
+lsp(action="references", file_path="main.py", line=10, character=5)
+
+# Hover documentation
+lsp(action="hover", file_path="main.py", line=10, character=5)
+
+# Document symbols
+lsp(action="symbols", file_path="main.py")
+
+# Check status
+lsp(action="status")
+```
+
+**Auto-diagnostics hook** (opt-in): Automatically appends LSP diagnostics after file-modifying tool calls:
+```bash
+export DEVDUCK_LSP_AUTO_DIAGNOSTICS=true
+devduck
+# Now every file edit automatically shows type errors/warnings
+```
+
+### 📝 Conversation Management
+
+View, drop, compact, and export agent conversation history:
+
+```python
+# List all turns
+manage_messages(action="list")
+
+# List only user messages
+manage_messages(action="list", role="user")
+
+# List all tool calls with IDs
+manage_messages(action="list_tools")
+
+# Drop specific turns
+manage_messages(action="drop", turns="0,2")
+
+# Compact turns (strip tool blocks, keep text)
+manage_messages(action="compact", start=0, end=5)
+
+# Export conversation
+manage_messages(action="export", path="/tmp/chat.json")
+
+# Import conversation
+manage_messages(action="import", path="/tmp/chat.json")
+
+# Get stats
+manage_messages(action="stats")
+
+# Clear all
+manage_messages(action="clear")
+```
+
+---
+
+## Apple Silicon Tools
+
+On-device AI tools that run entirely on Apple's Neural Engine — **zero cloud calls**:
+
+### 🧠 Apple NLP
+
+```python
+# Language detection
+apple_nlp(action="detect", text="Bonjour le monde")
+
+# Sentiment analysis
+apple_nlp(action="sentiment", text="This product is amazing!")
+
+# Named entity recognition
+apple_nlp(action="entities", text="Tim Cook announced new MacBook in Cupertino")
+
+# Part-of-speech tagging
+apple_nlp(action="pos", text="The quick brown fox jumps")
+
+# Word embeddings & similarity
+apple_nlp(action="distance", word="king", word2="queen")
+apple_nlp(action="similar", word="computer", top_k=10)
+
+# Lemmatization
+apple_nlp(action="lemma", text="The dogs were running quickly")
+```
+
+### 👁️ Apple Vision
+
+```python
+# OCR from image
+apple_vision(action="ocr", image_path="/path/to/screenshot.png")
+
+# OCR the current screen
+apple_vision(action="ocr_screen")
+
+# Detect barcodes/QR codes
+apple_vision(action="barcode", image_path="/path/to/image.png")
+
+# Detect faces
+apple_vision(action="faces", image_path="/path/to/photo.jpg")
+
+# Detect rectangles (documents, cards)
+apple_vision(action="rectangles", image_path="/path/to/scan.png")
+```
+
+### 📡 Apple WiFi
+
+```python
+# Current connection details
+apple_wifi(action="status")
+
+# Scan nearby networks
+apple_wifi(action="scan")
+
+# Signal quality analysis
+apple_wifi(action="signal")
+
+# Best channel recommendation
+apple_wifi(action="best_channel")
+
+# Full diagnostics
+apple_wifi(action="diagnostics")
+```
+
+### 🌡️ Apple Sensors & SMC
+
+```python
+# Full sensor status
+apple_sensors(action="status")
+
+# Temperature readings
+apple_smc(action="temps")
+
+# Fan speeds
+apple_smc(action="fans")
+
+# Power draw
+apple_smc(action="power")
+
+# Battery details
+apple_sensors(action="battery")
+
+# Keyboard backlight
+apple_sensors(action="set_keyboard", brightness=0.5)
+```
+
+---
+
+## AGENTS.md Project Context
+
+Place an `AGENTS.md` file in your working directory to automatically inject project-specific context into every agent query:
+
+```markdown
+# AGENTS.md
+
+## Project: My API Service
+- Framework: FastAPI
+- Database: PostgreSQL
+- Tests: pytest + httpx
+- Deploy: Docker on ECS
+
+## Conventions
+- Use async/await everywhere
+- Type hints required
+- Tests in tests/ directory
+```
+
+DevDuck auto-loads this file on startup and includes it in the system prompt. No configuration needed.
+
+---
+
+## Context Window Auto-Recovery
+
+DevDuck automatically handles context window overflow:
+
+1. When the conversation history exceeds the model's context limit, DevDuck detects the error
+2. It clears the message history automatically
+3. Retries the latest query with a fresh context
+4. No manual intervention needed — the agent self-heals
+
+This prevents the agent from getting stuck on long-running sessions.
+
+---
+
+## Speech-to-Speech
 
 **Real-time voice conversations** with multiple providers:
 
@@ -361,11 +759,6 @@ speech_to_speech(action="list_audio_devices")
 - **Nova Sonic (AWS Bedrock):** 11 voices (English, French, Italian, German, Spanish)
 - **OpenAI Realtime API:** GPT-4o Realtime models
 - **Gemini Live:** Native audio streaming
-
-**Environment Variables:**
-- `OPENAI_API_KEY` - For OpenAI Realtime
-- `GOOGLE_API_KEY` or `GEMINI_API_KEY` - For Gemini Live
-- AWS credentials - For Nova Sonic (boto3 default credential chain)
 
 **Features:**
 - Background execution (parent agent stays responsive)
@@ -483,34 +876,6 @@ devduck
 | **Direct messaging** | `send peer_id="..." message="..."` | Task specific instance |
 | **Cross-network** | Set `ZENOH_CONNECT` | Connect home ↔ office |
 
-### Actions
-
-```python
-# Start Zenoh networking (auto-starts by default)
-zenoh_peer(action="start")
-
-# Stop Zenoh
-zenoh_peer(action="stop")
-
-# Check status and peer count
-zenoh_peer(action="status")
-
-# List all discovered peers
-zenoh_peer(action="list_peers")
-
-# Broadcast to ALL peers (waits for responses)
-zenoh_peer(action="broadcast", message="your command", wait_time=60)
-
-# Send to specific peer
-zenoh_peer(action="send", peer_id="hostname-abc123", message="your command", wait_time=120)
-
-# Start with remote connection
-zenoh_peer(action="start", connect="tcp/remote.example.com:7447")
-
-# Start listening for remote connections
-zenoh_peer(action="start", listen="tcp/0.0.0.0:7447")
-```
-
 ### Environment Variables
 
 | Variable | Default | Description |
@@ -519,27 +884,11 @@ zenoh_peer(action="start", listen="tcp/0.0.0.0:7447")
 | `ZENOH_CONNECT` | - | Remote endpoint(s) to connect to |
 | `ZENOH_LISTEN` | - | Endpoint(s) to listen on for remote connections |
 
-### Features
-
-- **Zero Config:** Just start multiple DevDucks - they find each other
-- **Real-time Streaming:** Responses stream as they're generated
-- **Peer Awareness:** Dynamic context injection shows connected peers
-- **Cross-Network:** Connect instances across different networks
-- **Fault Tolerant:** Peers auto-detect disconnections (15s timeout)
-
 ---
 
 ## Unified Mesh (CLI + Browser + Cloud)
 
 **Connect ALL agent types** — terminal DevDucks, browser tabs, and cloud-deployed agents — into a single unified network with shared context.
-
-### How It Works
-
-1. **Mesh Relay** auto-starts on port 10000 (WebSocket)
-2. **File-based Registry** (`/tmp/devduck/mesh_registry.json`) tracks all agents
-3. **Browser peers** connect via `mesh.html` and register as first-class mesh participants
-4. **Ring context** is shared bidirectionally: CLI writes → browser sees it, browser writes → CLI sees it
-5. **AgentCore agents** (deployed to AWS) appear alongside local agents
 
 ### Architecture
 
@@ -584,48 +933,6 @@ devduck
 
 # Browser: Open mesh.html → auto-connects to ws://localhost:10000
 # Browser agents appear in zenoh peer list!
-
-# See all agents in the mesh
-🦆 unified_mesh(action="list_all")
-
-# Route to any agent type
-🦆 unified_mesh(action="route", target="browser:abc123", message="hello")
-🦆 unified_mesh(action="route", target="hostname-def456", message="git status")
-```
-
-### Mesh Registry
-
-The file-based registry provides **crash-safe agent discovery** with zero race conditions:
-
-```python
-from devduck.tools.mesh_registry import registry
-
-# All reads are lock-free (read whatever's on disk)
-agents = registry.get_all()              # All live agents
-zenoh = registry.get_by_type("zenoh")    # Filter by type
-agent = registry.get_agent("my-id")      # Single lookup
-
-# Writes use fcntl.flock() + atomic rename
-registry.register("my-agent", "local", {"name": "test"})
-registry.heartbeat("my-agent")           # Update last_seen
-registry.unregister("my-agent")          # Graceful shutdown
-
-# Stale entries auto-expire (30s TTL) — crash-safe
-print(registry.summary())
-```
-
-### Ring Context
-
-Shared memory across all agents:
-
-```python
-# Add to ring (auto-broadcasts to browsers)
-unified_mesh(action="add_ring", agent_id="devduck", text="Working on file analysis")
-
-# Get recent ring entries
-unified_mesh(action="get_ring", max_entries=20)
-
-# Ring is injected into every agent query as dynamic context
 ```
 
 ---
@@ -690,20 +997,6 @@ devduck invoke "analyze this code" --name my-agent
 devduck invoke "hello" --agent-id abc123-def456
 ```
 
-### Proxy Integration
-
-Deployed agents automatically appear in the unified mesh:
-
-```bash
-# DevDuck auto-starts proxy on ws://localhost:10000
-# Open mesh.html to see ALL agents (local + cloud)
-
-# WebSocket protocol:
-# {"type": "list_agents"}                              → See all agents
-# {"type": "invoke", "agent_id": "...", "prompt": "..."} → Invoke any agent
-# {"type": "get_ring"}                                  → Get ring context
-```
-
 ---
 
 ## Messaging Integrations (Telegram, WhatsApp, Slack)
@@ -727,9 +1020,6 @@ telegram(action="start_listener")
 telegram(action="send_message", chat_id="123456", text="Hello!")
 telegram(action="send_photo", chat_id="123456", file_path="/path/to/image.png")
 telegram(action="send_poll", chat_id="123456", question="Tabs or spaces?", options=["Tabs", "Spaces"])
-
-# Get bot info
-telegram(action="get_me")
 ```
 
 ### WhatsApp
@@ -742,17 +1032,8 @@ export STRANDS_WHATSAPP_AUTO_REPLY=true
 ```
 
 ```python
-# Start listening
 whatsapp(action="start_listener")
-
-# Send messages
 whatsapp(action="send_text", to="+1234567890", text="Hello from DevDuck!")
-whatsapp(action="send_file", to="+1234567890", file_path="/path/to/doc.pdf")
-
-# Search & browse
-whatsapp(action="chats_list")
-whatsapp(action="messages_search", query="meeting notes")
-whatsapp(action="contacts_search", query="John")
 ```
 
 ### Slack
@@ -764,16 +1045,8 @@ export STRANDS_SLACK_AUTO_REPLY=true
 ```
 
 ```python
-# Start Socket Mode listener
 slack(action="start_listener")
-
-# Send messages & react
 slack(action="send_message", channel="C123", text="Hello!")
-slack(action="send_message", channel="C123", text="Reply", thread_ts="1234.5678")
-slack(action="add_reaction", channel="C123", timestamp="1234.5678", emoji="thumbsup")
-
-# API passthrough
-slack(action="conversations_list")
 ```
 
 ---
@@ -789,7 +1062,6 @@ use_mac(action="calendar.create", title="Meeting", start="2026-03-01 10:00", end
 
 # Reminders
 use_mac(action="reminders.create", title="Buy groceries", due_date="2026-03-02", priority=1)
-use_mac(action="reminders.list", list_name="Work")
 
 # Mail
 use_mac(action="mail.send", to="user@example.com", subject="Hello", body="Hi there!")
@@ -802,7 +1074,6 @@ use_mac(action="safari.read")  # Read current page text
 
 # System
 use_mac(action="system.notify", text="Task complete!", title="DevDuck")
-use_mac(action="system.clipboard.get")
 use_mac(action="system.say", text="Hello world", voice="Samantha")
 use_mac(action="system.screenshot", path="/tmp/screenshot.png")
 use_mac(action="system.volume", level=50)
@@ -811,10 +1082,6 @@ use_mac(action="system.dark_mode", enable=True)
 # Finder
 use_mac(action="finder.selection")
 use_mac(action="finder.tag", path="/path/to/file", tags="important,review")
-
-# Messages & Music
-use_mac(action="messages.send", to="+1234567890", text="Hello!")
-use_mac(action="music.now_playing")
 
 # Keychain
 use_mac(action="keychain.get", service="MyApp", account="user@example.com")
@@ -831,20 +1098,10 @@ use_mac(action="jxa", script='Application("System Events").currentUser().name()'
 ### Apple Notes
 
 ```python
-# List & search
 apple_notes(action="list")
-apple_notes(action="list", folder="Work")
-apple_notes(action="search", query="meeting")
-
-# Create & edit
 apple_notes(action="create", title="Meeting Notes", body="## Agenda\n- Review Q1")
-apple_notes(action="edit", note_id="x-coredata://...", body="Updated content")
-apple_notes(action="append", note_id="x-coredata://...", body="\n## New section")
-
-# Organize & export
-apple_notes(action="move", note_id="x-coredata://...", target_folder="Archive")
+apple_notes(action="search", query="meeting")
 apple_notes(action="export", output_dir="/tmp/my_notes")
-apple_notes(action="folders")
 ```
 
 ---
@@ -859,47 +1116,10 @@ export SPOTIFY_CLIENT_SECRET="your-client-secret"
 ```
 
 ```python
-# Playback
 use_spotify(action="now_playing")
-use_spotify(action="play")
-use_spotify(action="pause")
-use_spotify(action="next")
-use_spotify(action="volume", volume=50)
-use_spotify(action="shuffle", shuffle_state=True)
-
-# Search & play
 use_spotify(action="search", query="Bohemian Rhapsody", search_type="track")
-use_spotify(action="queue.add", uri="spotify:track:...")
-
-# Playlists
 use_spotify(action="playlists")
-use_spotify(action="playlist.create", name="DevDuck Vibes", description="Coding music")
-use_spotify(action="playlist.add", playlist_id="...", uris="spotify:track:...,spotify:track:...")
-
-# Discovery
-use_spotify(action="top_tracks", time_range="short_term")
 use_spotify(action="recommendations", seed_genres="electronic,ambient", limit=10)
-use_spotify(action="recent")
-```
-
----
-
-## JSON-RPC Client
-
-Generic JSON-RPC client supporting HTTP and WebSocket transports.
-
-```python
-# HTTP endpoint
-jsonrpc(method="getInfo", endpoint="https://api.example.com/rpc")
-
-# WebSocket endpoint
-jsonrpc(method="subscribe", endpoint="wss://api.example.com/ws")
-
-# With parameters
-jsonrpc(method="getData", params=["arg1", {"key": "value"}], endpoint="https://api.example.com/rpc")
-
-# With authentication (secure - uses env var)
-jsonrpc(method="getPrivateData", endpoint="https://api.example.com/rpc", auth_env_var="SERVICE_API_KEY", auth_type="Bearer")
 ```
 
 ---
@@ -912,26 +1132,14 @@ Train RL agents, run hyperparameter sweeps, fine-tune LLMs — all from DevDuck.
 # Train an RL agent
 rl(action="train", env_id="CartPole-v1", algorithm="PPO", total_timesteps=50000)
 
-# Evaluate a trained model
+# Evaluate
 rl(action="eval", env_id="CartPole-v1", model_path="rl_models/.../best_model")
-
-# Watch agent play (with video recording)
-rl(action="play", env_id="CartPole-v1", model_path="rl_models/.../best_model", record_video=True)
 
 # Hyperparameter sweep
 rl(action="sweep", env_id="LunarLander-v3", n_trials=8)
 
-# Create custom environment
-rl(action="create_env", env_name="my_env", reward_code="...", obs_dim=4, act_dim=2, act_type="discrete")
-
 # Fine-tune LLM with LoRA
 rl(action="finetune", model_id="Qwen/Qwen2.5-0.5B", dataset_id="tatsu-lab/alpaca", method="lora")
-
-# Supervised Fine-Tuning with TRL
-rl(action="sft", model_id="meta-llama/Llama-3.2-1B", dataset_path="./data.jsonl")
-
-# Inference on fine-tuned model
-rl(action="inference", model_path="./ml_models/my_model", prompt="Hello world")
 
 # List saved models
 rl(action="list_models")
@@ -953,8 +1161,6 @@ devduck --record "analyze this codebase"
 # Resume from recorded session
 devduck --resume ~/Desktop/session-20250202-123456.zip
 devduck --resume session.zip "continue where we left off"
-
-# Resume from specific snapshot
 devduck --resume session.zip --snapshot 2 "what was I working on?"
 ```
 
@@ -975,17 +1181,9 @@ devduck --resume session.zip --snapshot 2 "what was I working on?"
 ```python
 from devduck import load_session, resume_session, list_sessions
 
-# List all recordings
-sessions = list_sessions()
-# [{'name': 'session-20250202-123456.zip', 'size_kb': 45.2, ...}]
-
 # Load and analyze a session
 session = load_session("~/Desktop/session-20250202-123456.zip")
 print(session)  # LoadedSession(events=156, snapshots=3, duration=342.5s)
-
-# Get events by layer
-tool_calls = session.get_events_by_layer("tool")
-file_ops = session.get_events_by_type("file.open")
 
 # Resume from snapshot (restores conversation history!)
 result = session.resume_from_snapshot(2, agent=devduck.agent)
@@ -993,21 +1191,6 @@ print(f"Restored {result['messages_restored']} messages")
 
 # Resume and continue with new query
 result = session.resume_and_continue(2, "what files did we modify?", devduck.agent)
-print(result['agent_result'])
-
-# Replay with callback
-def on_event(event, idx):
-    print(f"[{idx}] {event.layer}/{event.event_type}: {event.data}")
-session.replay_events(callback=on_event)
-```
-
-**Session file structure (ZIP):**
-```
-session-20250202-123456.zip
-├── events.jsonl      # All events in JSON Lines format
-├── snapshots.json    # State snapshots with conversation history
-├── metadata.json     # Session info (duration, hostname, etc.)
-└── session.pkl       # Serialized state for full restore (dill/pickle)
 ```
 
 **Recordings saved to:** `/tmp/devduck/recordings/`
@@ -1016,9 +1199,7 @@ session-20250202-123456.zip
 
 ### 🎥 Asciinema Recording (Shareable Agent Trajectories)
 
-**Record agent sessions as `.cast` files** — play them anywhere with `asciinema play`, upload to [asciinema.org](https://asciinema.org), or embed in docs and blog posts.
-
-**Zero dependencies** — asciicast v2 is just JSON Lines. No `asciinema` package needed for recording.
+**Record agent sessions as `.cast` files** — play them anywhere with `asciinema play`, upload to [asciinema.org](https://asciinema.org), or embed in docs.
 
 ```bash
 # Enable asciinema recording
@@ -1036,45 +1217,12 @@ DEVDUCK_CAST_DIR=~/my-casts DEVDUCK_ASCIINEMA=true devduck
 | 🛠️ **Tool markers** | Visual `───` separators when tools start |
 | ✔/✖ **Tool results** | Completion/failure with durations |
 | 💭 **Thinking** | Reasoning/thinking text (dimmed) |
-| ⏳ **Throttle warnings** | Rate limit notifications |
 
-**Playback & sharing:**
+**Playback:**
 ```bash
-# Play locally (install asciinema for playback only)
 asciinema play /tmp/devduck/casts/devduck-20260306-023100.cast
-
-# Upload to asciinema.org for sharing
 asciinema upload /tmp/devduck/casts/devduck-20260306-023100.cast
-
-# Embed in HTML (via asciinema-player.js)
-# <asciinema-player src="recording.cast" cols="120" rows="40"></asciinema-player>
-
-# Cat (instant dump without timing)
-asciinema cat /tmp/devduck/casts/devduck-20260306-023100.cast
 ```
-
-**How it works:**
-
-The `AsciinemaCallbackHandler` is a drop-in replacement for the default `CallbackHandler`. It mirrors all console output exactly while simultaneously writing [asciicast v2](https://docs.asciinema.org/manual/asciicast/v2/) events to a `.cast` file:
-
-```
-devduck-20260306-023100.cast (JSON Lines):
-┌─ {"version": 2, "width": 120, "height": 40, ...}     ← header
-├─ [0.001, "o", "🦆 DevDuck Session Recording\n"]       ← output event
-├─ [0.502, "i", "what is 2+2?"]                         ← input event  
-├─ [0.510, "o", "──────── 🛠️  calculator ────\n"]       ← tool marker
-├─ [1.203, "o", "The answer is 4\n"]                    ← agent output
-└─ [1.205, "o", "✔ calculator completed in 0.69s\n"]    ← tool result
-```
-
-**Configuration:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DEVDUCK_ASCIINEMA` | `false` | Enable asciinema recording |
-| `DEVDUCK_CAST_DIR` | `/tmp/devduck/casts` | Output directory for `.cast` files |
-
-Recording auto-stops and prints the file path when you exit the REPL (`exit`/`quit`/`q`).
 
 ---
 
@@ -1093,76 +1241,16 @@ devduck
 ```
 
 **Standard Mode:** Runs up to 3 iterations when you go idle (30s)
-```bash
-# Configuration
-export DEVDUCK_AMBIENT_IDLE_SECONDS=30      # Wait before starting
-export DEVDUCK_AMBIENT_MAX_ITERATIONS=3     # Max background iterations
-export DEVDUCK_AMBIENT_COOLDOWN=60          # Seconds between runs
-```
 
-**Autonomous Mode:** Runs continuously until done or stopped
-```bash
-export DEVDUCK_AUTONOMOUS_MAX_ITERATIONS=50  # Higher limit
-export DEVDUCK_AUTONOMOUS_COOLDOWN=10        # Faster cycles
-```
+**Autonomous Mode:** Runs continuously until done or stopped — agent signals completion with `[AMBIENT_DONE]`
 
 **How it works:**
 1. You go idle (30s default)
 2. DevDuck continues exploring the last topic
 3. Background work streams with 🌙 prefix
 4. When you return, findings are injected into your next query
-5. Agent can signal completion with `[AMBIENT_DONE]`
-
-**Programmatic control:**
-```python
-# Enable standard ambient mode
-devduck.ambient.start()
-
-# Enable autonomous mode
-devduck.ambient.start(autonomous=True)
-
-# Stop ambient mode
-devduck.ambient.stop()
-
-# Check status
-devduck.status()['ambient_mode']
-```
 
 ---
-
-### State Management (Time-Travel)
-
-Save and restore agent state for reproducibility:
-
-```python
-# Export current state
-state_manager(action="export", metadata={"note": "before refactor"})
-
-# List saved states
-state_manager(action="list")
-
-# Load and display state
-state_manager(action="load", state_file="~/.devduck/states/devduck_20250118_150000.pkl")
-
-# Resume from state (ephemeral - doesn't mutate parent)
-state_manager(
-    action="resume", 
-    state_file="~/.devduck/states/devduck_20250118_150000.pkl",
-    query="continue the analysis from where we left off"
-)
-
-# Modify state metadata
-state_manager(
-    action="modify",
-    state_file="path/to/state.pkl",
-    metadata={"tags": ["important", "refactor"]}
-)
-
-# Delete state
-state_manager(action="delete", state_file="path/to/state.pkl")
-```
-
-States saved to: `~/.devduck/states/`
 
 ### System Prompt Management
 
@@ -1179,170 +1267,8 @@ system_prompt(action="add_context", context="New learning: Always use FastAPI fo
 system_prompt(action="update", prompt="You are a specialized DevOps agent...")
 
 # Sync to GitHub (persist across deployments)
-system_prompt(
-    action="update",
-    prompt="Updated system prompt with new learnings...",
-    repository="cagataycali/devduck"
-)
-
-# Reset to default
-system_prompt(action="reset")
+system_prompt(action="update", prompt="Updated...", repository="cagataycali/devduck")
 ```
-
-**Pattern:** Learn → Add context → Sync to GitHub → Persist forever
-
-### Knowledge Base (Auto-RAG)
-
-**Automatic memory** across sessions:
-
-```bash
-export DEVDUCK_KNOWLEDGE_BASE_ID=your_kb_id
-devduck
-```
-
-**How it works:**
-1. Before each query: Retrieves relevant context from KB
-2. After each response: Stores conversation for future reference
-3. No manual tool calls needed - fully automatic
-
-**Manual storage:**
-```python
-store_in_kb(
-    content="Important information to remember...",
-    title="Project Context",
-    knowledge_base_id="optional-kb-id"
-)
-```
-
-### Sub-Agent Creation
-
-**Delegate tasks** to specialized agents via GitHub Actions:
-
-```python
-# Create sub-agent with specific model and tools
-create_subagent(
-    repository="owner/repo",
-    workflow_id="agent.yml",
-    task="Analyze this dataset and provide insights",
-    model="us.anthropic.claude-sonnet-4-20250514-v1:0",
-    provider="bedrock",
-    max_tokens=60000,
-    tools="file_read,python_repl,calculator,http_request"
-)
-
-# Custom system prompt for specialized behavior
-create_subagent(
-    repository="owner/repo",
-    workflow_id="agent.yml",
-    task="Review code and suggest improvements",
-    tools="file_read,editor,shell",
-    system_prompt="You are a senior code reviewer focused on best practices"
-)
-
-# Check sub-agent status
-create_subagent(action="status", repository="owner/repo", workflow_id="agent.yml", run_id="12345")
-
-# List recent runs
-create_subagent(action="list", repository="owner/repo", workflow_id="agent.yml")
-```
-
----
-
-<details>
-<summary><strong>📋 All Built-in Tools (54 total)</strong></summary>
-
-### DevDuck Core (33 tools)
-- `system_prompt` - Update agent's system prompt (GitHub sync support)
-- `store_in_kb` - Store content in Bedrock Knowledge Base
-- `state_manager` - Save/restore agent state (time-travel)
-- `session_recorder` - 🎬 Record sessions for replay and debugging
-- `tcp` - TCP server with real-time streaming
-- `websocket` - WebSocket server with concurrent messaging
-- `ipc` - Unix socket IPC server for local processes
-- `mcp_server` - Expose as MCP server (HTTP/stdio)
-- `zenoh_peer` - Peer-to-peer networking with auto-discovery
-- `agentcore_proxy` - 🌐 Unified mesh relay (Zenoh + AgentCore + browser peers)
-- `unified_mesh` - Single source of truth for all agent types + ring context
-- `mesh_registry` - File-based agent discovery with fcntl locking and TTL
-- `ambient_mode` - Control ambient/autonomous background thinking
-- `install_tools` - Install packages and load tools at runtime
-- `create_subagent` - Spawn sub-agents via GitHub Actions
-- `use_github` - GitHub GraphQL API operations
-- `tray` - System tray app control (macOS)
-- `ambient` - Ambient AI input overlay (macOS)
-- `agentcore_config` - Configure & launch on Bedrock AgentCore
-- `agentcore_invoke` - Invoke deployed AgentCore agents
-- `agentcore_logs` - View CloudWatch logs from agents
-- `agentcore_agents` - List/manage agent runtimes
-- `manage_tools` - Runtime tool add/remove/reload
-- `view_logs` - View/search/clear DevDuck logs
-- `speech_to_speech` - Real-time speech-to-speech conversations (optional - install with `pip install devduck[speech]`)
-- `use_mac` - 🍎 Unified macOS system control (Calendar, Reminders, Mail, Contacts, Safari, Finder, System Events, Shortcuts, Messages, Music, Keychain, AppleScript/JXA)
-- `apple_notes` - 📝 Apple Notes management (create, read, edit, delete, search, move, export)
-- `use_spotify` - 🎵 Full Spotify control (playback, search, playlists, queue, library, devices, discovery)
-- `telegram` - 💬 Telegram bot integration (listener, messaging, inline keyboards, polls, media)
-- `whatsapp` - 💬 WhatsApp integration via wacli (messaging, contacts, groups, media - no Cloud API needed)
-- `slack` - 💬 Slack integration (Socket Mode listener, messaging, reactions, file uploads)
-- `jsonrpc` - 🔌 Generic JSON-RPC client for any RPC service (HTTP & WebSocket transports)
-- `rl` - 🎮 Reinforcement Learning & ML toolkit (train/eval/play RL agents with Stable-Baselines3, fine-tune LLMs with LoRA/SFT)
-
-### Strands Tools (13 tools)
-- `shell` - Interactive shell with PTY support
-- `editor` - File editing (view/create/replace/insert/undo)
-- `file_read` - Multi-file reading with search modes
-- `file_write` - Write content to files
-- `calculator` - SymPy-powered math (solve/derive/integrate)
-- `image_reader` - Read images for Converse API
-- `use_agent` - Nested agent with different model
-- `load_tool` - Load custom tools from Python files
-- `environment` - Environment variable management
-- `mcp_client` - Connect to external MCP servers autonomously
-- `retrieve` - Bedrock Knowledge Base retrieval
-- `speak` - Text-to-speech (macOS `say` or AWS Polly)
-
-### Strands Fun Tools (6 tools - macOS)
-- `listen` - Background speech transcription (Whisper)
-- `cursor` - Mouse & keyboard control
-- `clipboard` - Clipboard monitoring & control
-- `screen_reader` - OCR & UI element detection
-- `bluetooth` - BLE scanning and GATT operations
-- `yolo_vision` - Object detection with YOLO
-
-### Community Tools (./tools/)
-- `fetch_github_tool` - Fetch and load tools from GitHub repos
-- `gist` - Comprehensive GitHub Gist management (create/update/fork/star/comment)
-- `scraper` - HTML/XML parsing with BeautifulSoup4
-- `add_comment` - Add comments to GitHub issues/PRs
-- `list_issues` - List GitHub repository issues
-- `list_pull_requests` - List GitHub repository PRs
-
-**Plus:** Hot-reload tools from `./tools/` directory when `DEVDUCK_LOAD_TOOLS_FROM_DIR=true`
-
-</details>
-
----
-
-## Hot-Reload Example
-
-```python
-# ./tools/weather.py
-from strands import tool
-import requests
-
-@tool
-def weather(city: str) -> str:
-    """Get weather for a city."""
-    r = requests.get(f"https://wttr.in/{city}?format=%C+%t")
-    return r.text
-```
-
-**Save → use instantly:**
-```bash
-🦆 weather(city="Tokyo")
-# Clear sky +15°C
-```
-
-No restart. No configuration. Just works.
 
 ---
 
@@ -1351,6 +1277,7 @@ No restart. No configuration. Just works.
 | Protocol | Endpoint | Test Command | Use Case |
 |----------|----------|--------------|----------|
 | **CLI** | Terminal | `devduck "query"` | Interactive/one-shot |
+| **TUI** | Terminal | `devduck --tui` | Multi-conversation UI |
 | **Python** | Import | `import devduck; devduck("query")` | Script integration |
 | **Mesh Relay** | `localhost:10000` | Open `mesh.html` | Unified mesh (browser + all agents) |
 | **WebSocket** | `localhost:10001` | `wscat -c ws://localhost:10001` | Browser/async apps |
@@ -1361,32 +1288,16 @@ No restart. No configuration. Just works.
 ### CLI Commands
 
 ```bash
-# Interactive REPL
-devduck
-
-# One-shot query
-devduck "your query here"
-
-# MCP stdio mode (for Claude Desktop integration)
-devduck --mcp
-
-# Deploy to AgentCore
-devduck deploy --launch
-devduck deploy --name my-agent --tools "strands_tools:shell,editor" --launch
-
-# Manage deployed agents
-devduck list                              # List all agents
-devduck status --name my-agent            # Check status
-devduck invoke "hello" --name my-agent    # Invoke agent
-
-# Session recording
-devduck --record                    # Start with recording enabled
-devduck --record "do something"     # Record a one-shot query
-
-# Resume from recorded session
-devduck --resume session.zip        # Resume from latest snapshot
-devduck --resume session.zip "continue"  # Resume and run new query
-devduck --resume session.zip --snapshot 2 "continue"  # Resume from specific snapshot
+devduck                                   # Interactive REPL
+devduck --tui                             # Multi-conversation TUI
+devduck "your query here"                 # One-shot query
+devduck --mcp                             # MCP stdio mode (Claude Desktop)
+devduck --record                          # Start with recording enabled
+devduck --resume session.zip              # Resume from recorded session
+devduck deploy --launch                   # Deploy to AgentCore
+devduck list                              # List deployed agents
+devduck status --name my-agent            # Check agent status
+devduck invoke "hello" --name my-agent    # Invoke deployed agent
 ```
 
 ### REPL Commands
@@ -1398,19 +1309,6 @@ devduck --resume session.zip --snapshot 2 "continue"  # Resume from specific sna
 | `auto` / `autonomous` | Toggle autonomous mode |
 | `record` | Toggle session recording |
 | `!<command>` | Execute shell command (e.g., `!ls -la`) |
-| `status` | Check agent status |
-
-**Custom ports:**
-```bash
-export DEVDUCK_TCP_PORT=10002 DEVDUCK_WS_PORT=10001 DEVDUCK_MCP_PORT=10003 DEVDUCK_AGENTCORE_PROXY_PORT=10000
-devduck
-```
-
-**Disable servers:**
-```bash
-export DEVDUCK_ENABLE_TCP=false DEVDUCK_ENABLE_MCP=false
-devduck
-```
 
 ---
 
@@ -1432,7 +1330,7 @@ devduck
 | `LITELLM_API_KEY` | - | LiteLLM API key (auto-detected) |
 | `LLAMAAPI_API_KEY` | - | LlamaAPI key (auto-detected) |
 | **Tools** | | |
-| `DEVDUCK_TOOLS` | 54 tools | Format: `package1:tool1,tool2;package2:tool3` |
+| `DEVDUCK_TOOLS` | 60+ tools | Format: `package1:tool1,tool2;package2:tool3` |
 | `DEVDUCK_LOAD_TOOLS_FROM_DIR` | `false` | Auto-load from `./tools/` directory |
 | **Memory** | | |
 | `DEVDUCK_KNOWLEDGE_BASE_ID` | - | Bedrock KB ID for auto-RAG |
@@ -1458,10 +1356,13 @@ devduck
 | `DEVDUCK_AMBIENT_IDLE_SECONDS` | `30` | Seconds idle before ambient starts |
 | `DEVDUCK_AMBIENT_MAX_ITERATIONS` | `3` | Max iterations in standard mode |
 | `DEVDUCK_AMBIENT_COOLDOWN` | `60` | Seconds between ambient runs |
-| `DEVDUCK_AUTONOMOUS_MAX_ITERATIONS` | `50` | Max iterations in autonomous mode |
+| `DEVDUCK_AUTONOMOUS_MAX_ITERATIONS` | `100` | Max iterations in autonomous mode |
 | `DEVDUCK_AUTONOMOUS_COOLDOWN` | `10` | Seconds between autonomous runs |
-| **Speech** | | |
-| `BIDI_MODEL_ID` | Provider default | Override bidi model (e.g., `amazon.nova-2-sonic-v1:0`) |
+| **LSP** | | |
+| `DEVDUCK_LSP_AUTO_DIAGNOSTICS` | `false` | Auto-append LSP diagnostics after file edits |
+| **Recording** | | |
+| `DEVDUCK_ASCIINEMA` | `false` | Enable asciinema `.cast` recording |
+| `DEVDUCK_CAST_DIR` | `/tmp/devduck/casts` | Output directory for `.cast` files |
 | **Messaging** | | |
 | `TELEGRAM_BOT_TOKEN` | - | Telegram bot token from @BotFather |
 | `STRANDS_TELEGRAM_AUTO_REPLY` | `false` | Enable auto-reply on Telegram |
@@ -1470,13 +1371,10 @@ devduck
 | `SLACK_APP_TOKEN` | - | Slack app token for Socket Mode (xapp-...) |
 | `STRANDS_SLACK_AUTO_REPLY` | `false` | Enable auto-reply on Slack |
 | `STRANDS_WHATSAPP_AUTO_REPLY` | `false` | Enable auto-reply on WhatsApp |
-| `WHATSAPP_ALLOWED_SENDERS` | - | Comma-separated phone/JID allowlist |
 | **Spotify** | | |
 | `SPOTIFY_CLIENT_ID` | - | Spotify client ID |
 | `SPOTIFY_CLIENT_SECRET` | - | Spotify client secret |
 | **Context** | | |
-| `DEVDUCK_ASCIINEMA` | `false` | Enable asciinema `.cast` recording |
-| `DEVDUCK_CAST_DIR` | `/tmp/devduck/casts` | Output directory for `.cast` files |
 | `DEVDUCK_LOG_LINE_COUNT` | `50` | Recent log lines in context |
 | `DEVDUCK_LAST_MESSAGE_COUNT` | `200` | Recent messages in context |
 
@@ -1486,69 +1384,116 @@ devduck
 
 **Ollama model not found:**
 ```bash
-# DevDuck auto-pulls models, but if it fails:
 ollama pull qwen3:1.7b
 ```
 
 **Port already in use:**
 ```bash
-# Change ports (10000+ block)
 export DEVDUCK_AGENTCORE_PROXY_PORT=10010
 export DEVDUCK_WS_PORT=10011
-export DEVDUCK_TCP_PORT=10012
 devduck
+```
+
+**Context window overflow:**
+DevDuck auto-recovers by clearing history and retrying. If it persists:
+```python
+manage_messages(action="clear")
 ```
 
 **Hot-reload not working:**
 ```bash
-# Ensure tools directory exists
 mkdir -p ./tools
-
-# Check file watcher logs
 devduck
 🦆 view_logs(action="search", pattern="watcher")
 ```
 
 **Memory/performance issues:**
 ```bash
-# Use lighter model
 export STRANDS_MODEL_ID="qwen3:0.5b"
-
-# Reduce context
 export DEVDUCK_LOG_LINE_COUNT=20
 export DEVDUCK_LAST_MESSAGE_COUNT=50
 ```
 
-**Speech dependencies not found:**
-```bash
-# Install speech extras
-pip install "devduck[speech]"
-
-# Or with pipx
-pipx install "devduck[speech]"
-```
-
-**Ambient overlay not starting:**
-```bash
-# Make sure tkinter is installed
-python3 -c "import tkinter"
-
-# Install tkinter if missing
-brew install python-tk@3.13  # macOS
-sudo apt-get install python3-tk  # Ubuntu/Debian
-sudo dnf install python3-tkinter  # Fedora
-```
-
-**Tray app not starting (macOS):**
-```bash
-# Install rumps
-pip install rumps
-
-# Or reinstall devduck
-pip install -e .
-```
-
 **View logs:** `devduck` → `🦆 view_logs()`
+
+---
+
+<details>
+<summary><strong>📋 All Built-in Tools (60+)</strong></summary>
+
+### DevDuck Core Tools
+- `system_prompt` - Update agent's system prompt (GitHub sync support)
+- `store_in_kb` - Store content in Bedrock Knowledge Base
+- `state_manager` - Save/restore agent state (time-travel)
+- `session_recorder` - 🎬 Record sessions for replay and debugging
+- `manage_tools` - Runtime tool add/remove/create/fetch/discover
+- `manage_messages` - View/drop/compact/export conversation history
+- `tasks` - 📋 Background parallel agent tasks
+- `scheduler` - ⏰ Cron and one-time job scheduling
+- `sqlite_memory` - 🧠 SQLite persistent memory with FTS
+- `dialog` - 💬 Interactive terminal dialogs (forms, pickers)
+- `notify` - 🔔 Native OS notifications
+- `use_computer` - 🖥️ Mouse, keyboard, screenshots
+- `listen` - 🎤 Background speech transcription (Whisper)
+- `lsp` - 🔍 Language Server Protocol integration
+- `tui` - 🖥️ Push content to TUI from agent
+- `tcp` - TCP server with real-time streaming
+- `websocket` - WebSocket server with concurrent messaging
+- `ipc` - Unix socket IPC server for local processes
+- `mcp_server` - Expose as MCP server (HTTP/stdio)
+- `zenoh_peer` - Peer-to-peer networking with auto-discovery
+- `agentcore_proxy` - 🌐 Unified mesh relay (Zenoh + AgentCore + browser peers)
+- `unified_mesh` - Single source of truth for all agent types + ring context
+- `mesh_registry` - File-based agent discovery with fcntl locking and TTL
+- `ambient_mode` - Control ambient/autonomous background thinking
+- `install_tools` - Install packages and load tools at runtime
+- `create_subagent` - Spawn sub-agents via GitHub Actions
+- `use_github` - GitHub GraphQL API operations
+- `fetch_github_tool` - Fetch and load tools from GitHub repos
+- `gist` - GitHub Gist management (create/update/fork/star/comment)
+- `tray` - System tray app control (macOS)
+- `ambient` - Ambient AI input overlay (macOS)
+- `agentcore_config` - Configure & launch on Bedrock AgentCore
+- `agentcore_invoke` - Invoke deployed AgentCore agents
+- `agentcore_logs` - View CloudWatch logs from agents
+- `agentcore_agents` - List/manage agent runtimes
+- `view_logs` - View/search/clear DevDuck logs
+- `speech_to_speech` - Real-time speech-to-speech conversations
+- `use_mac` - 🍎 Unified macOS system control
+- `apple_notes` - 📝 Apple Notes management
+- `use_spotify` - 🎵 Full Spotify control
+- `telegram` - 💬 Telegram bot integration
+- `whatsapp` - 💬 WhatsApp integration via wacli
+- `slack` - 💬 Slack integration
+- `jsonrpc` - 🔌 Generic JSON-RPC client
+- `rl` - 🎮 RL & ML toolkit
+- `scraper` - HTML/XML parsing with BeautifulSoup4
+
+### Apple Silicon Tools (./tools/)
+- `apple_nlp` - 🧠 On-device NLP (sentiment, entities, embeddings, POS)
+- `apple_vision` - 👁️ On-device Vision (OCR, barcodes, faces, rectangles)
+- `apple_wifi` - 📡 WiFi intelligence (scan, signal, diagnostics)
+- `apple_sensors` - 🍎 Hardware sensors (accelerometer, ambient light, lid)
+- `apple_smc` - 🌡️ SMC thermal, fan, and power data
+
+### Strands Tools
+- `shell` - Interactive shell with PTY support
+- `editor` - File editing (view/create/replace/insert/undo)
+- `file_read` - Multi-file reading with search modes
+- `file_write` - Write content to files
+- `calculator` - SymPy-powered math
+- `image_reader` - Read images for Converse API
+- `use_agent` - Nested agent with different model
+- `retrieve` - Bedrock Knowledge Base retrieval
+- `speak` - Text-to-speech
+
+### Community / Hot-Reload Tools
+- `add_comment` - Add comments to GitHub issues/PRs
+- `list_issues` - List GitHub repository issues
+- `list_pull_requests` - List GitHub repository PRs
+- Hot-reload any `.py` from `./tools/` when `DEVDUCK_LOAD_TOOLS_FROM_DIR=true`
+
+</details>
 
 ---
 
@@ -1580,11 +1525,6 @@ jobs:
           tools: "shell,file_read,file_write,use_github,calculator"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-
-**Sub-agent workflows:**
-```python
-devduck("Create a sub-agent to analyze test coverage")
 ```
 
 ---

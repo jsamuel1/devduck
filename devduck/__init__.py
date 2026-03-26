@@ -1861,7 +1861,7 @@ class DevDuck:
             # Append to default tools if any server tools are needed
             if server_tools_needed:
                 server_tools_str = ",".join(server_tools_needed)
-                default_tools = f"devduck.tools:system_prompt,fetch_github_tool,manage_tools,manage_messages,tasks,websocket,zenoh_peer,ambient_mode,{server_tools_str};strands_tools:shell"
+                default_tools = f"devduck.tools:system_prompt,fetch_github_tool,manage_tools,manage_messages,tasks,websocket,zenoh_peer,ambient_mode,notify,{server_tools_str};strands_tools:shell"
                 logger.info(f"Auto-added server tools: {server_tools_str}")
             else:
                 default_tools = "devduck.tools:system_prompt,fetch_github_tool,manage_tools,manage_messages,websocket,zenoh_peer,ambient_mode;strands_tools:shell"
@@ -3923,6 +3923,7 @@ def cli():
 Examples:
   devduck                          # Start interactive mode
   devduck "your query here"        # One-shot query
+  devduck --tui                    # Multi-conversation TUI (concurrent)
   devduck --mcp                    # MCP stdio mode (for Claude Desktop)
   devduck --record                 # Start with session recording enabled
   devduck --record "do something"  # Record a one-shot query
@@ -4078,6 +4079,13 @@ Claude Desktop Config:
         help="Start MCP server in stdio mode (for Claude Desktop integration)",
     )
 
+    # TUI mode flag
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="Launch multi-conversation TUI (concurrent interleaved messages)",
+    )
+
     # Session recording flag
     parser.add_argument(
         "--record",
@@ -4164,6 +4172,22 @@ Claude Desktop Config:
                 sys.exit(1)
         else:
             print("🦆 Agent not available", file=sys.stderr)
+            sys.exit(1)
+        return
+
+    # Handle --tui flag for multi-conversation TUI
+    if args.tui:
+        logger.info("Starting TUI mode")
+        try:
+            from devduck.tui import run_tui
+            run_tui(devduck_instance=devduck)
+        except ImportError as e:
+            print(f"🦆 TUI requires 'textual' package: pip install textual")
+            print(f"   Error: {e}")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"TUI failed: {e}")
+            print(f"🦆 TUI error: {e}")
             sys.exit(1)
         return
 

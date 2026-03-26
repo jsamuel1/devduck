@@ -48,6 +48,7 @@ dependencies = [
     "strands-mlx; sys_platform == 'darwin'",
     "eclipse-zenoh",
     "halo",
+    "textual>=0.80",
     "strands-agents[bidi-all]",
     "openai-whisper",
     "webrtcvad",
