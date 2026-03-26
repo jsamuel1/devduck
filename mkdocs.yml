@@ -1,0 +1,101 @@
+site_name: DevDuck
+site_url: https://dev.duck.nyc
+site_description: "Extreme minimalist self-adapting AI agent. One file. Self-healing. Builds itself as it runs."
+repo_url: https://github.com/cagataycali/devduck
+repo_name: cagataycali/devduck
+extra_css:
+  - stylesheets/extra.css?v=1
+extra_javascript:
+  - https://unpkg.com/mermaid@10/dist/mermaid.min.js
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quickstart: getting-started/quickstart.md
+    - Run Anywhere: getting-started/run-anywhere.md
+  - Guide:
+    - Hot Reload: guide/hot-reload.md
+    - Tools: guide/tools.md
+    - Models: guide/models.md
+    - Multi-Agent: guide/multi-agent.md
+    - Servers: guide/servers.md
+    - MCP Integration: guide/mcp.md
+    - Zenoh P2P: guide/zenoh.md
+    - Ambient Mode: guide/ambient-mode.md
+    - System Prompt: guide/system-prompt.md
+    - Knowledge Base: guide/knowledge-base.md
+    - Session Recording: guide/session-recording.md
+    - TUI Mode: guide/tui.md
+    - AgentCore Deploy: guide/agentcore.md
+  - Examples:
+    - Overview: examples/overview.md
+    - CLI Workflows: examples/cli.md
+    - Multi-Model: examples/multi-model.md
+    - Background Tasks: examples/background-tasks.md
+  - Architecture: architecture.md
+  - API Reference: api-reference.md
+theme:
+  name: material
+  logo: duck.svg
+  favicon: duck.svg
+  icon:
+    repo: fontawesome/brands/github
+  palette:
+    - scheme: default
+      primary: white
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: black
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - toc.follow
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - navigation.top
+    - navigation.tracking
+    - search.suggest
+    - search.highlight
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format ''
+  - pymdownx.tabbed:
+      alternate_style: true
+  - admonition
+  - pymdownx.details
+  - pymdownx.betterem
+  - pymdownx.mark
+  - pymdownx.caret
+  - pymdownx.tilde
+  - pymdownx.keys
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji ''
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg ''
+  - attr_list
+  - md_in_html
+  - tables
+  - def_list
+  - footnotes
+  - toc:
+      permalink: true
+plugins:
+  - search
