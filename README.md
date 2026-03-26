@@ -164,13 +164,28 @@ devduck/
 └── agentcore_handler.py  # AWS AgentCore deployment handler
 ```
 
-```
-User → [CLI/TUI/WS/TCP/MCP/IPC] → DevDuck Core → Tools → Response
-                                        ↕                    ↕
-                                   Zenoh P2P            Knowledge Base
-                                        ↕
-                                  Browser + Cloud
-                                  (Unified Mesh)
+```mermaid
+graph LR
+    User([👤 User]) --> Interface
+    subgraph Interface[" "]
+        CLI["CLI / REPL"]
+        TUI["TUI"]
+        WS["WebSocket"]
+        TCP["TCP"]
+        MCP["MCP"]
+    end
+    Interface --> Core["🦆 DevDuck Core"]
+    Core --> Tools["🔧 Tools"]
+    Core <--> Zenoh["🔗 Zenoh P2P"]
+    Core <--> KB["📚 Knowledge Base"]
+    Core <--> Mesh["🌐 Unified Mesh"]
+    Mesh --> Browser["🖥️ Browser"]
+    Mesh --> Cloud["☁️ AgentCore"]
+
+    style Core fill:#f5a623,stroke:#333,color:#000
+    style Mesh fill:#4a90d9,stroke:#333,color:#fff
+    style Zenoh fill:#7ed321,stroke:#333,color:#000
+    style KB fill:#9b59b6,stroke:#333,color:#fff
 ```
 
 **Ports:** 10000 (mesh relay) · 10001 (WebSocket) · 10002 (TCP) · 10003 (MCP)
@@ -179,19 +194,30 @@ User → [CLI/TUI/WS/TCP/MCP/IPC] → DevDuck Core → Tools → Response
 
 The TUI (`devduck --tui`) supports true concurrent conversations with shared awareness:
 
-```
-              ┌─────────────────────────────────┐
-              │   SharedMessages (thread-safe)   │
-              │   [msg1, msg2, msg3, msg4, ...]  │
-              └───┬──────────┬──────────┬───────┘
-                  │          │          │
-                  ▼          ▼          ▼
-            ┌──────────┐ ┌──────────┐ ┌──────────┐
-            │ Agent #1 │ │ Agent #2 │ │ Agent #3 │
-            │ cb → 🟦  │ │ cb → 🟩  │ │ cb → 🟨  │
-            │ panel #1 │ │ panel #2 │ │ panel #3 │
-            └──────────┘ └──────────┘ └──────────┘
-            All agents share the SAME messages list
+```mermaid
+graph TB
+    subgraph SharedMessages["📋 SharedMessages (thread-safe)"]
+        msgs["msg1, msg2, msg3, msg4, ..."]
+    end
+
+    SharedMessages --> A1
+    SharedMessages --> A2
+    SharedMessages --> A3
+
+    subgraph A1["🟦 Agent #1"]
+        cb1["callback → panel #1"]
+    end
+    subgraph A2["🟩 Agent #2"]
+        cb2["callback → panel #2"]
+    end
+    subgraph A3["🟨 Agent #3"]
+        cb3["callback → panel #3"]
+    end
+
+    style SharedMessages fill:#e74c3c,stroke:#333,color:#fff
+    style A1 fill:#3498db,stroke:#333,color:#fff
+    style A2 fill:#2ecc71,stroke:#333,color:#fff
+    style A3 fill:#f1c40f,stroke:#333,color:#000
 ```
 
 Each conversation creates a **fresh Agent** (like TCP/Telegram tools do), but all agents point their `.messages` at a single `SharedMessages` instance — a thread-safe list subclass that serializes all reads and writes via a lock. This gives you:
@@ -238,24 +264,41 @@ Cross-network: `ZENOH_CONNECT=tcp/remote:7447 devduck`
 
 The mesh is DevDuck's shared nervous system. Every agent — regardless of where it runs — sees what others are doing via a **ring context** (a shared circular buffer of recent activity).
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Unified Mesh (port 10000)                │
-│                                                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
-│  │ Terminal  │  │ Terminal  │  │ Browser  │  │ AgentCore │  │
-│  │ DevDuck  │  │ DevDuck  │  │   Tab    │  │  (cloud)  │  │
-│  │ (Zenoh)  │  │ (Zenoh)  │  │  (WS)   │  │  (AWS)    │  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └─────┬─────┘  │
-│       │              │              │               │       │
-│       └──────────────┴──────┬───────┴───────────────┘       │
-│                             │                               │
-│                    ┌────────▼────────┐                      │
-│                    │  Ring Context   │                      │
-│                    │ (shared memory) │                      │
-│                    │  last 100 msgs  │                      │
-│                    └─────────────────┘                      │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Mesh["🌐 Unified Mesh (port 10000)"]
+        direction TB
+
+        T1["🖥️ Terminal DevDuck<br/>(Zenoh)"]
+        T2["🖥️ Terminal DevDuck<br/>(Zenoh)"]
+        B1["🌍 Browser Tab<br/>(WebSocket)"]
+        AC["☁️ AgentCore<br/>(AWS Cloud)"]
+        GH["🐙 GitHub Actions<br/>(HTTPS)"]
+
+        Ring[("🔄 Ring Context<br/>shared memory<br/>last 100 msgs")]
+
+        T1 <--> Ring
+        T2 <--> Ring
+        B1 <--> Ring
+        AC <--> Ring
+        GH <--> Ring
+    end
+
+    Registry["📁 mesh_registry.json<br/>(file-based, TTL)"]
+    Relay["📡 Relay Server<br/>ws://localhost:10000"]
+
+    Ring --> Registry
+    Ring --> Relay
+
+    style Mesh fill:#1a1a2e,stroke:#4a90d9,color:#fff
+    style Ring fill:#f5a623,stroke:#333,color:#000
+    style T1 fill:#7ed321,stroke:#333,color:#000
+    style T2 fill:#7ed321,stroke:#333,color:#000
+    style B1 fill:#4a90d9,stroke:#333,color:#fff
+    style AC fill:#9b59b6,stroke:#333,color:#fff
+    style GH fill:#333,stroke:#fff,color:#fff
+    style Registry fill:#e74c3c,stroke:#333,color:#fff
+    style Relay fill:#3498db,stroke:#333,color:#fff
 ```
 
 **Four peer types, one network:**
