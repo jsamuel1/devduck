@@ -23,8 +23,6 @@ Environment:
 import os
 import sys
 import time
-import math
-import hashlib
 import logging
 import threading
 from pathlib import Path
@@ -52,11 +50,25 @@ def _ensure_pyserial():
         return True
 
 
+# ─── Port detection with caching ────────────────────────────────────────────
+
+_cached_port: Optional[str] = None
+_cached_port_time: float = 0.0
+_PORT_CACHE_TTL: float = 30.0  # Cache port detection for 30 seconds
+
+
 def _find_flipper_port() -> Optional[str]:
-    """Auto-detect connected Flipper Zero."""
+    """Auto-detect connected Flipper Zero (with caching to avoid log spam)."""
+    global _cached_port, _cached_port_time
+
     env_port = os.environ.get("FLIPPER_PORT")
     if env_port:
         return env_port
+
+    # Return cached result if fresh enough
+    now = time.monotonic()
+    if _cached_port and (now - _cached_port_time) < _PORT_CACHE_TTL:
+        return _cached_port
 
     _ensure_pyserial()
     import serial.tools.list_ports as list_ports
@@ -64,12 +76,26 @@ def _find_flipper_port() -> Optional[str]:
     flippers = list(list_ports.grep("flip_"))
     if len(flippers) == 1:
         logger.info(f"Found Flipper: {flippers[0].serial_number} on {flippers[0].device}")
-        return flippers[0].device
+        _cached_port = flippers[0].device
+        _cached_port_time = now
+        return _cached_port
     elif len(flippers) > 1:
-        # Return first, but log warning
         logger.warning(f"Multiple Flippers found ({len(flippers)}), using first: {flippers[0].device}")
-        return flippers[0].device
+        _cached_port = flippers[0].device
+        _cached_port_time = now
+        return _cached_port
+
+    # No flipper found — clear cache
+    _cached_port = None
+    _cached_port_time = 0.0
     return None
+
+
+def _invalidate_port_cache():
+    """Invalidate port cache (call on disconnect or error)."""
+    global _cached_port, _cached_port_time
+    _cached_port = None
+    _cached_port_time = 0.0
 
 
 # ─── Buffered serial reader ─────────────────────────────────────────────────
@@ -111,6 +137,8 @@ CLI_EOL = "\r\n"
 # Connection pool (reuse across calls)
 _connections: Dict[str, Any] = {}
 _conn_lock = threading.Lock()
+# Separate lock for serial I/O to prevent parallel command corruption
+_serial_lock = threading.Lock()
 
 
 def _get_connection(port: str = None):
@@ -160,26 +188,30 @@ def _get_connection(port: str = None):
 
 
 def _send_cmd(conn, cmd: str, timeout: float = 15.0) -> str:
-    """Send a CLI command and return the response text."""
-    ser = conn["serial"]
-    reader = conn["reader"]
+    """Send a CLI command and return the response text.
 
-    # Clear any pending data
-    ser.reset_input_buffer()
-    reader.buffer.clear()
+    Thread-safe: acquires _serial_lock to prevent parallel command corruption.
+    """
+    with _serial_lock:
+        ser = conn["serial"]
+        reader = conn["reader"]
 
-    # Send command
-    ser.write(f"{cmd}\r".encode("ascii"))
+        # Clear any pending data
+        ser.reset_input_buffer()
+        reader.buffer.clear()
 
-    # Read echo of command
-    try:
-        reader.until(CLI_EOL, timeout=timeout)
-    except TimeoutError:
-        pass
+        # Send command
+        ser.write(f"{cmd}\r".encode("ascii"))
 
-    # Read until prompt
-    response = reader.until(CLI_PROMPT, timeout=timeout)
-    return response.decode("utf-8", errors="replace").strip()
+        # Read echo of command
+        try:
+            reader.until(CLI_EOL, timeout=timeout)
+        except TimeoutError:
+            pass
+
+        # Read until prompt
+        response = reader.until(CLI_PROMPT, timeout=timeout)
+        return response.decode("utf-8", errors="replace").strip()
 
 
 def _close_connection(port: str = None):
@@ -198,6 +230,7 @@ def _close_connection(port: str = None):
                 except Exception:
                     pass
             _connections.clear()
+    _invalidate_port_cache()
 
 
 # ─── Storage helpers ─────────────────────────────────────────────────────────
@@ -224,66 +257,91 @@ def _storage_list(conn, path: str) -> list:
     return entries
 
 
+def _storage_tree(conn, path: str, prefix: str = "", max_depth: int = 4, _depth: int = 0) -> list:
+    """Recursively list files/dirs as a tree."""
+    if _depth >= max_depth:
+        return [f"{prefix}... (max depth reached)"]
+
+    entries = _storage_list(conn, path)
+    lines = []
+    for i, entry in enumerate(entries):
+        is_last = (i == len(entries) - 1)
+        connector = "└── " if is_last else "├── "
+        child_prefix = prefix + ("    " if is_last else "│   ")
+
+        if entry["type"] == "dir":
+            lines.append(f"{prefix}{connector}📂 {entry['name']}/")
+            # Recurse into subdirectory
+            child_path = f"{path.rstrip('/')}/{entry['name']}"
+            lines.extend(_storage_tree(conn, child_path, child_prefix, max_depth, _depth + 1))
+        else:
+            size = entry.get("size", "?")
+            lines.append(f"{prefix}{connector}📄 {entry['name']} ({size})")
+    return lines
+
+
 def _storage_read_file(conn, flipper_path: str) -> bytes:
     """Read a file from Flipper and return bytes."""
-    ser = conn["serial"]
-    reader = conn["reader"]
-    chunk_size = 8192
-
-    ser.reset_input_buffer()
-    reader.buffer.clear()
-
-    ser.write(f'storage read_chunks "{flipper_path}" {chunk_size}\r'.encode("ascii"))
-    reader.until(CLI_EOL, timeout=10)
-    answer = reader.until(CLI_EOL, timeout=10)
-
-    if b"Storage error:" in answer:
-        error = answer.decode("utf-8", errors="replace")
-        reader.until(CLI_PROMPT, timeout=5)
-        raise FileNotFoundError(f"Flipper: {error}")
-
-    # Parse size
-    size = int(answer.split(b": ")[1])
-    filedata = bytearray()
-    read_size = 0
-
-    while read_size < size:
-        reader.until("Ready?" + CLI_EOL, timeout=15)
-        ser.write(b"y")
-        to_read = min(size - read_size, chunk_size)
-        filedata.extend(ser.read(to_read))
-        read_size += to_read
-
-    reader.until(CLI_PROMPT, timeout=5)
-    return bytes(filedata)
-
-
-def _storage_write_file(conn, flipper_path: str, data: bytes):
-    """Write data to a file on Flipper."""
-    ser = conn["serial"]
-    reader = conn["reader"]
-    chunk_size = 8192
-
-    offset = 0
-    while offset < len(data):
-        chunk = data[offset:offset + chunk_size]
-        size = len(chunk)
+    with _serial_lock:
+        ser = conn["serial"]
+        reader = conn["reader"]
+        chunk_size = 8192
 
         ser.reset_input_buffer()
         reader.buffer.clear()
 
-        ser.write(f'storage write_chunk "{flipper_path}" {size}\r'.encode("ascii"))
+        ser.write(f'storage read_chunks "{flipper_path}" {chunk_size}\r'.encode("ascii"))
         reader.until(CLI_EOL, timeout=10)
         answer = reader.until(CLI_EOL, timeout=10)
 
         if b"Storage error:" in answer:
             error = answer.decode("utf-8", errors="replace")
             reader.until(CLI_PROMPT, timeout=5)
-            raise IOError(f"Flipper write error: {error}")
+            raise FileNotFoundError(f"Flipper: {error}")
 
-        ser.write(chunk)
-        reader.until(CLI_PROMPT, timeout=15)
-        offset += size
+        # Parse size
+        size = int(answer.split(b": ")[1])
+        filedata = bytearray()
+        read_size = 0
+
+        while read_size < size:
+            reader.until("Ready?" + CLI_EOL, timeout=15)
+            ser.write(b"y")
+            to_read = min(size - read_size, chunk_size)
+            filedata.extend(ser.read(to_read))
+            read_size += to_read
+
+        reader.until(CLI_PROMPT, timeout=5)
+        return bytes(filedata)
+
+
+def _storage_write_file(conn, flipper_path: str, data: bytes):
+    """Write data to a file on Flipper."""
+    with _serial_lock:
+        ser = conn["serial"]
+        reader = conn["reader"]
+        chunk_size = 8192
+
+        offset = 0
+        while offset < len(data):
+            chunk = data[offset:offset + chunk_size]
+            size = len(chunk)
+
+            ser.reset_input_buffer()
+            reader.buffer.clear()
+
+            ser.write(f'storage write_chunk "{flipper_path}" {size}\r'.encode("ascii"))
+            reader.until(CLI_EOL, timeout=10)
+            answer = reader.until(CLI_EOL, timeout=10)
+
+            if b"Storage error:" in answer:
+                error = answer.decode("utf-8", errors="replace")
+                reader.until(CLI_PROMPT, timeout=5)
+                raise IOError(f"Flipper write error: {error}")
+
+            ser.write(chunk)
+            reader.until(CLI_PROMPT, timeout=15)
+            offset += size
 
 
 # ─── The tool ────────────────────────────────────────────────────────────────
@@ -424,8 +482,18 @@ def use_flipper(
             return {"status": "success", "content": [{"text": text}]}
 
         elif action == "power_info":
-            response = _send_cmd(conn, "power info")
-            text = f"🐬 Power Info:\n{response}"
+            # BUG FIX: was "power info" (shows usage), correct command is "info power"
+            response = _send_cmd(conn, "info power")
+            lines = response.replace("\r", "").split("\n")
+            info = {}
+            for line in lines:
+                if ":" in line:
+                    k, v = line.split(":", 1)
+                    info[k.strip()] = v.strip()
+            # Format nicely
+            text = "🐬 Power Info:\n"
+            for k, v in info.items():
+                text += f"  {k}: {v}\n"
             return {"status": "success", "content": [{"text": text}]}
 
         elif action == "datetime":
@@ -435,7 +503,9 @@ def use_flipper(
 
         elif action == "uptime":
             response = _send_cmd(conn, "uptime")
-            text = f"🐬 Uptime: {response}"
+            # BUG FIX: Flipper returns "Uptime: Xh..." — avoid doubling the prefix
+            clean = response.removeprefix("Uptime:").strip()
+            text = f"🐬 Uptime: {clean}"
             return {"status": "success", "content": [{"text": text}]}
 
         # ── Storage ──
@@ -456,10 +526,14 @@ def use_flipper(
             return {"status": "success", "content": [{"text": text}]}
 
         elif action == "tree":
+            # BUG FIX: was just calling storage list (same as ls), now does recursive tree
             if not path:
                 path = "/ext"
-            response = _send_cmd(conn, f'storage list "{path}"', timeout=30)
-            text = f"🌲 {path}:\n{response}"
+            tree_lines = _storage_tree(conn, path)
+            if not tree_lines:
+                text = f"🌲 {path}: (empty)"
+            else:
+                text = f"🌲 {path}:\n" + "\n".join(tree_lines)
             return {"status": "success", "content": [{"text": text}]}
 
         elif action == "read":
@@ -601,7 +675,8 @@ def use_flipper(
 
         # ── Bluetooth ──
         elif action == "bt_info":
-            response = _send_cmd(conn, "bt info", timeout=5)
+            # BUG FIX: was "bt info" (shows usage), correct command is "bt hci_info"
+            response = _send_cmd(conn, "bt hci_info", timeout=5)
             return {"status": "success", "content": [{"text": f"🔵 Bluetooth:\n{response}"}]}
 
         # ── Raw CLI ──
@@ -619,10 +694,11 @@ def use_flipper(
         else:
             return {
                 "status": "error",
-                "content": [{"text": f"Unknown action: {action}. Valid: detect, info, ls, read, write, send, receive, mkdir, rm, stat, md5, df, led, vibro, speaker, alert, ir_tx, subghz_tx, nfc_detect, app_list, app_start, bt_info, cli, connect, disconnect"}],
+                "content": [{"text": f"Unknown action: {action}. Valid: detect, info, power_info, datetime, uptime, ls, tree, read, write, send, receive, mkdir, rm, stat, md5, df, led, vibro, speaker, alert, ir_tx, subghz_tx, nfc_detect, app_list, app_start, bt_info, cli, connect, disconnect"}],
             }
 
     except ConnectionError as e:
+        _invalidate_port_cache()
         return {"status": "error", "content": [{"text": f"🐬 Connection error: {e}"}]}
     except TimeoutError as e:
         return {"status": "error", "content": [{"text": f"🐬 Timeout: {e}"}]}
@@ -630,4 +706,6 @@ def use_flipper(
         return {"status": "error", "content": [{"text": f"🐬 Not found: {e}"}]}
     except Exception as e:
         logger.error(f"Flipper tool error: {e}", exc_info=True)
+        # Invalidate port cache on unexpected errors (may be disconnected)
+        _invalidate_port_cache()
         return {"status": "error", "content": [{"text": f"🐬 Error: {e}"}]}
