@@ -25,6 +25,7 @@ from .tray import tray
 from .use_github import use_github
 from .websocket import websocket
 from .zenoh_peer import zenoh_peer
+from .zcm_peer import zcm_peer
 from .ambient_mode import ambient_mode
 from .listen import listen
 from .tasks import tasks
@@ -66,6 +67,7 @@ try:
         "use_github",
         "websocket",
         "zenoh_peer",
+        "zcm_peer",
         "ambient_mode",
         "listen",
         "tasks",
@@ -103,6 +105,7 @@ except ImportError:
         "use_github",
         "websocket",
         "zenoh_peer",
+        "zcm_peer",
         "ambient_mode",
         "listen",
         "tasks",

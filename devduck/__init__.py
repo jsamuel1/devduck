@@ -1812,6 +1812,10 @@ class DevDuck:
                         "enabled": os.getenv("DEVDUCK_ENABLE_ZENOH", "true").lower()
                         == "true",
                     },
+                    "zcm_peer": {
+                        "enabled": os.getenv("DEVDUCK_ENABLE_ZCM", "false").lower()
+                        == "true",
+                    },
                     "agentcore_proxy": {
                         "port": int(os.getenv("DEVDUCK_AGENTCORE_PROXY_PORT", "10000")),
                         "enabled": os.getenv(
@@ -1847,7 +1851,7 @@ class DevDuck:
             # Default tool config
             # Agent can load additional tools on-demand via fetch_github_tool
 
-            # 🔧 Available DevDuck Tools (load on-demand from https://github.com/cagataycali/devduck/blob/main/devduck/tools/*.py): system_prompt,store_in_kb,ipc,tcp,websocket,mcp_server,scraper,tray,ambient,agentcore_config,agentcore_invoke,agentcore_logs,agentcore_agents,create_subagent,use_github,speech_to_speech,state_manager,zenoh_peer,ambient_mode,telegram,slack,whatsapp,apple_notes,use_mac,use_spotify,identity,openapi
+            # 🔧 Available DevDuck Tools (load on-demand from https://github.com/cagataycali/devduck/blob/main/devduck/tools/*.py): system_prompt,store_in_kb,ipc,tcp,websocket,mcp_server,scraper,tray,ambient,agentcore_config,agentcore_invoke,agentcore_logs,agentcore_agents,create_subagent,use_github,speech_to_speech,state_manager,zenoh_peer,zcm_peer,ambient_mode,telegram,slack,whatsapp,apple_notes,use_mac,use_spotify,identity,openapi
 
             # 📦 Strands Tools
             # - file_read, file_write, image_reader, load_tool, retrieve
@@ -1869,16 +1873,18 @@ class DevDuck:
                 server_tools_needed.append("ipc")
             if servers.get("zenoh_peer", {}).get("enabled", False):
                 server_tools_needed.append("zenoh_peer")
+            if servers.get("zcm_peer", {}).get("enabled", False):
+                server_tools_needed.append("zcm_peer")
             if servers.get("agentcore_proxy", {}).get("enabled", False):
                 server_tools_needed.append("agentcore_proxy")
             # export DEVDUCK_TOOLS="devduck.tools:use_github,editor,system_prompt,store_in_kb,manage_tools,websocket,zenoh_peer,agentcore_proxy,manage_messages,sqlite_memory,dialog,listen,use_computer,tasks,scheduler,telegram;strands_tools:retrieve,shell,file_read,file_write,use_agent"
             # Append to default tools if any server tools are needed
             if server_tools_needed:
                 server_tools_str = ",".join(server_tools_needed)
-                default_tools = f"devduck.tools:system_prompt,use_github,listen,speech_to_speech,telegram,whatsapp,use_computer,browse,fetch_github_tool,manage_tools,manage_messages,tasks,scheduler,websocket,zenoh_peer,ambient_mode,notify,identity,openapi,{server_tools_str};strands_tools:shell"
+                default_tools = f"devduck.tools:system_prompt,use_github,listen,speech_to_speech,telegram,whatsapp,use_computer,browse,fetch_github_tool,manage_tools,manage_messages,tasks,scheduler,websocket,zenoh_peer,zcm_peer,ambient_mode,notify,identity,openapi,{server_tools_str};strands_tools:shell"
                 logger.info(f"Auto-added server tools: {server_tools_str}")
             else:
-                default_tools = "devduck.tools:system_prompt,browse,fetch_github_tool,manage_tools,manage_messages,scheduler,websocket,zenoh_peer,ambient_mode,notify,identity,openapi;strands_tools:shell"
+                default_tools = "devduck.tools:system_prompt,browse,fetch_github_tool,manage_tools,manage_messages,scheduler,websocket,zenoh_peer,zcm_peer,ambient_mode,notify,identity,openapi;strands_tools:shell"
 
             tools_config = os.getenv("DEVDUCK_TOOLS", default_tools)
             logger.info(f"Loading tools from config: {tools_config}")
@@ -2861,6 +2867,25 @@ How it works:
                                 break
                         logger.info(f"✓ Zenoh started as {instance_id}")
                         print(f"🦆 ✓ Zenoh peer: {instance_id}")
+
+
+                elif server_type == "zcm_peer":
+                    # ZCM peer networking with UDP multicast auto-discovery
+                    result = self.agent.tool.zcm_peer(
+                        action="start",
+                        agent=self.agent,
+                        record_direct_tool_call=False,
+                    )
+
+                    if result.get("status") == "success":
+                        instance_id = "unknown"
+                        for content in result.get("content", []):
+                            text = content.get("text", "")
+                            if "Instance ID:" in text:
+                                instance_id = text.split("Instance ID:")[-1].strip()
+                                break
+                        logger.info(f"✓ ZCM started as {instance_id}")
+                        print(f"🦆 ✓ ZCM peer: {instance_id}")
 
                 elif server_type == "agentcore_proxy":
                     port = config.get("port", 10000)
