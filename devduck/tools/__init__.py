@@ -36,6 +36,7 @@ from .scheduler import scheduler
 from .dialog import dialog
 from .manage_messages import manage_messages
 from .manage_tools import manage_tools
+from .service import service
 from .rich_interface import rich_interface
 from .editor import editor
 from .use_flipper import use_flipper
@@ -78,6 +79,7 @@ try:
         "dialog",
         "manage_messages",
         "manage_tools",
+        "service",
         "rich_interface",
         "editor",
         "use_flipper",
@@ -116,6 +118,7 @@ except ImportError:
         "dialog",
         "manage_messages",
         "manage_tools",
+        "service",
         "rich_interface",
         "editor",
         "use_flipper",

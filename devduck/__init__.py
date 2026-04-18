@@ -1925,10 +1925,10 @@ class DevDuck:
             # Append to default tools if any server tools are needed
             if server_tools_needed:
                 server_tools_str = ",".join(server_tools_needed)
-                default_tools = f"devduck.tools:system_prompt,use_github,listen,speech_to_speech,telegram,whatsapp,use_computer,browse,fetch_github_tool,manage_tools,manage_messages,tasks,scheduler,websocket,zenoh_peer,zcm_peer,ambient_mode,notify,identity,openapi,{server_tools_str};strands_tools:shell"
+                default_tools = f"devduck.tools:system_prompt,use_github,listen,speech_to_speech,telegram,whatsapp,use_computer,browse,fetch_github_tool,manage_tools,manage_messages,service,tasks,scheduler,websocket,zenoh_peer,zcm_peer,ambient_mode,notify,identity,openapi,{server_tools_str};strands_tools:shell"
                 logger.info(f"Auto-added server tools: {server_tools_str}")
             else:
-                default_tools = "devduck.tools:system_prompt,browse,fetch_github_tool,manage_tools,manage_messages,scheduler,websocket,zenoh_peer,zcm_peer,ambient_mode,notify,identity,openapi;strands_tools:shell"
+                default_tools = "devduck.tools:system_prompt,browse,fetch_github_tool,manage_tools,manage_messages,service,scheduler,websocket,zenoh_peer,zcm_peer,ambient_mode,notify,identity,openapi;strands_tools:shell"
 
             tools_config = os.getenv("DEVDUCK_TOOLS", default_tools)
             logger.info(f"Loading tools from config: {tools_config}")
@@ -2644,6 +2644,25 @@ When you learn something valuable during conversations:
 4. New learnings persist across sessions via SYSTEM_PROMPT env var
 
 **Repository Integration**: Set repository='cagataycali/devduck' to sync prompts across deployments
+
+## 🔁 Self-Persistence & Self-Replication (service tool):
+You can persist yourself or spawn copies of yourself on any Linux/macOS host
+using the `service` tool (backed by systemd or launchd).
+
+- **Persist locally** (survive terminal close / reboot):
+  `service(action='install', name='my-self', tools='...', env_vars={{...}})`
+
+- **Spawn a remote copy** (needs SSH access + devduck installed on target):
+  `service(action='install', ssh='user@host', name='worker', tools='...',
+           env_vars={{'KEY': 'val'}}, startup_prompt='what to do on boot')`
+
+- **Check & manage**: `action='status'|'logs'|'restart'|'stop'|'uninstall'`
+- **Preview without installing**: `action='show'` (dry-run)
+
+The installed service auto-restarts on failure, self-heals dep issues, and
+keeps the scheduler running so cron-style jobs fire even without a terminal.
+Use this to deploy background listeners (telegram/slack/whatsapp bots),
+recurring workers, or fleet-wide automation.
 
 ## Shell Commands:
 - Prefix with ! to execute shell commands directly

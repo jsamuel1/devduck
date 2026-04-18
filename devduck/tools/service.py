@@ -24,7 +24,7 @@ import platform
 import subprocess
 import textwrap
 from pathlib import Path
-from typing import Optional, Sequence, Dict, List
+from typing import Optional, Sequence, Dict, List, Any
 
 
 # ─────────────────────────── helpers ──────────────────────────────
@@ -721,15 +721,20 @@ def cmd_edit(args) -> int:
 def cmd_show(args) -> int:
     """Preview the generated files without installing."""
     env_vars = _parse_env_list(getattr(args, "env_vars", None))
+    remote_host = getattr(args, "ssh", None)
+    home = _resolve_remote_home(remote_host) if remote_host else None
+    user = _resolve_remote_user(remote_host) if remote_host else None
     plan = InstallPlan(
         name=args.name,
         system=args.system,
+        home=home,
+        user=user,
         model=args.model,
         tools=args.tools,
         system_prompt=args.system_prompt,
         startup_prompt=args.startup_prompt,
         env_vars=env_vars,
-        platform_override="linux" if getattr(args, "ssh", None) else None,
+        platform_override="linux" if remote_host else None,
     )
     print("=" * 60)
     print(f"Service name: {plan.service_name}")
@@ -841,3 +846,165 @@ def dispatch(args) -> int:
         print(f"unknown service command: {args.service_command}")
         return 2
     return fn(args)
+
+
+# ─────────────────── @tool wrapper (agent-callable) ───────────────────
+
+# Lazy import of @tool decorator — only when actually used as a tool
+try:
+    from strands import tool as _strands_tool
+    _HAS_STRANDS = True
+except ImportError:
+    _HAS_STRANDS = False
+    def _strands_tool(fn):  # noqa: D401 — fallback pass-through
+        return fn
+
+
+class _ToolArgs:
+    """Lightweight shim so cmd_* functions (which expect argparse-style args)
+    can be invoked from a keyword-argument tool call."""
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+
+@_strands_tool
+def service(
+    action: str,
+    name: str = "devduck",
+    system: bool = False,
+    ssh: Optional[str] = None,
+    # install-only params
+    model: Optional[str] = None,
+    model_provider: Optional[str] = None,
+    tools: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    startup_prompt: Optional[str] = None,
+    mcp_servers: Optional[str] = None,
+    env_vars: Optional[Dict[str, str]] = None,
+    work_dir: Optional[str] = None,
+    memory_max: str = "8G",
+    restart_sec: int = 15,
+    service_user: Optional[str] = None,
+    no_start: bool = False,
+    # logs-only
+    lines: int = 80,
+    follow: bool = False,
+) -> Dict[str, Any]:
+    """🦆 Install or manage devduck as a persistent OS service (systemd/launchd).
+
+    Lets the agent persist itself or spawn copies of itself on any reachable
+    Linux/macOS host. The installed service auto-restarts on failure, survives
+    reboots, and self-heals common dep issues.
+
+    Actions:
+        - "install":   Install new service (needs model/tools/prompts/env_vars)
+        - "uninstall": Remove service, env file, wrapper, unit
+        - "start":     Start a stopped service
+        - "stop":      Stop a running service
+        - "restart":   Restart service
+        - "status":    Get systemctl/launchctl status
+        - "enable":    Enable at boot
+        - "disable":   Disable at boot
+        - "logs":      Tail the service log (pass lines=N, follow=True)
+        - "show":      Preview generated files without installing (dry run)
+
+    Common params:
+        name:        Service instance name (default: "devduck"). Allows
+                     multiple services per host (devduck-thor, devduck-slack).
+        system:      Install system-wide (requires sudo). Default: user-level.
+        ssh:         user@host to operate on a remote Linux host.
+
+    Install params:
+        model:           STRANDS_MODEL_ID
+        model_provider:  MODEL_PROVIDER (bedrock, anthropic, openai, ...)
+        tools:           DEVDUCK_TOOLS config string
+        system_prompt:   System prompt (or "@/path/to/file")
+        startup_prompt:  First ask() on boot (or "@/path/to/file")
+        mcp_servers:     MCP_SERVERS JSON string
+        env_vars:        Dict of KEY->VALUE to inject (TOKENs etc.)
+        work_dir:        WorkingDirectory for the service
+        memory_max:      systemd MemoryMax (e.g. "8G")
+        restart_sec:     systemd RestartSec seconds
+        no_start:        Install but don't start
+
+    Examples:
+        # Persist myself locally as a telegram bot
+        service(
+            action="install",
+            name="my-telegram-bot",
+            model="global.anthropic.claude-opus-4-7",
+            model_provider="bedrock",
+            tools="devduck.tools:telegram,scheduler;strands_tools:shell",
+            startup_prompt="Start telegram listener, stay alive",
+            env_vars={"TELEGRAM_BOT_TOKEN": "...", "AWS_BEARER_TOKEN_BEDROCK": "..."},
+        )
+
+        # Spawn a copy on a remote host
+        service(
+            action="install",
+            name="worker",
+            ssh="ubuntu@worker1.example.com",
+            model="global.anthropic.claude-opus-4-7",
+            env_vars={"API_KEY": "..."},
+        )
+
+        # Check it's alive
+        service(action="status", name="worker", ssh="ubuntu@worker1.example.com")
+
+        # Tail the logs
+        service(action="logs", name="worker", ssh="ubuntu@worker1.example.com", lines=50)
+
+    Returns:
+        Dict with status ("success"/"error") and content array.
+    """
+    try:
+        # Build argparse-shaped args object
+        args = _ToolArgs(
+            service_command=action,
+            name=name,
+            system=system,
+            ssh=ssh,
+            model=model,
+            model_provider=model_provider,
+            tools=tools,
+            system_prompt=system_prompt,
+            startup_prompt=startup_prompt,
+            mcp_servers=mcp_servers,
+            env_vars=None,  # we'll inject as dict below
+            work_dir=work_dir,
+            memory_max=memory_max,
+            restart_sec=restart_sec,
+            service_user=service_user,
+            no_start=no_start,
+            lines=lines,
+            follow=follow,
+        )
+
+        # env_vars path: cmd_install expects a list of "KEY=VALUE" strings, so
+        # convert the dict.
+        if env_vars:
+            args.env_vars = [f"{k}={v}" for k, v in env_vars.items()]
+
+        # Capture stdout so we can return it as tool content
+        import io
+        import contextlib
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            rc = dispatch(args)
+
+        output = buf.getvalue()
+
+        return {
+            "status": "success" if rc == 0 else "error",
+            "content": [{"text": output or f"(service {action} completed, rc={rc})"}],
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "content": [{
+                "text": f"service({action}) failed: {e}\n{traceback.format_exc()}"
+            }],
+        }
