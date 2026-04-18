@@ -34,6 +34,7 @@ pipx install devduck && devduck
 - **Multi-protocol** — CLI, TUI, WebSocket, TCP, MCP, IPC, Zenoh P2P
 - **Unified mesh** — terminal + browser + cloud agents in one network
 - **Deploys anywhere** — `devduck deploy --launch` → AWS AgentCore
+- **Self-replicates** — `devduck service install --ssh host` persists itself or spawns copies on any host (systemd/launchd)
 
 **Requirements:** Python 3.10–3.13 + any model provider (AWS, Anthropic, OpenAI, Ollama, Gemini, etc.)
 
@@ -353,6 +354,86 @@ devduck deploy --name reviewer --tools "strands_tools:shell,editor" --launch
 devduck list        # see deployed agents
 devduck invoke "analyze code" --name reviewer
 ```
+
+## Self-Replication & Persistence
+
+DevDuck can install itself — or copies of itself — as a **persistent OS service** (systemd on Linux, launchd on macOS) that survives terminal close, auto-restarts on failure, and starts at boot.
+
+### CLI
+
+```bash
+# Persist the current devduck as a local service (user-level, no sudo)
+devduck service install \
+  --name my-bot \
+  --tools "devduck.tools:telegram,scheduler;strands_tools:shell" \
+  --env TELEGRAM_BOT_TOKEN=... \
+  --startup-prompt "Start the telegram listener, then stay alive."
+
+# Spawn a copy on a remote host over SSH
+devduck service install \
+  --name worker1 \
+  --ssh user@host.example.com \
+  --tools "devduck.tools:scheduler,notify;strands_tools:shell,file_read" \
+  --env AWS_BEARER_TOKEN_BEDROCK=... \
+  --startup-prompt "You are worker1. Stay alive."
+
+# Manage
+devduck service status    --name my-bot
+devduck service logs      --name my-bot --lines 100 --follow
+devduck service restart   --name my-bot
+devduck service uninstall --name my-bot
+
+# Dry-run preview without installing
+devduck service show --name my-bot --ssh user@host
+```
+
+### As an agent tool
+
+The `service` tool is loaded by default, so **the agent can replicate itself on command**:
+
+```python
+import devduck
+
+devduck.ask(
+    "Spawn a copy of yourself on my worker box at ops@10.0.0.42 named "
+    "'pr-watcher' with tools use_github+scheduler+telegram. Pass through "
+    "my GITHUB_TOKEN and TELEGRAM_BOT_TOKEN. Its job: poll PRs every 5 "
+    "min and notify me via telegram."
+)
+```
+
+Under the hood the agent calls:
+
+```python
+service(
+    action="install",
+    name="pr-watcher",
+    ssh="ops@10.0.0.42",
+    tools="devduck.tools:use_github,scheduler,telegram;strands_tools:shell",
+    env_vars={"GITHUB_TOKEN": "...", "TELEGRAM_BOT_TOKEN": "..."},
+    startup_prompt="Poll my PRs every 5 min, notify via telegram.",
+)
+```
+
+### What gets installed
+
+| File         | Path (user-level, Linux)                            |
+|--------------|-----------------------------------------------------|
+| systemd unit | `~/.config/systemd/user/devduck-<name>.service`     |
+| Env file     | `~/.config/devduck/devduck-<name>.env`              |
+| Wrapper      | `~/.local/bin/devduck-<name>-agent`                 |
+| Log          | `~/.cache/devduck-<name>.log`                       |
+
+- `Type=simple`, `Restart=always` (15s), `MemoryMax=8G`
+- Wrapper self-heals common dep issues (`pydantic-core`) and keeps the process alive as an idle loop so schedulers/listeners keep running
+- Re-running `install` is idempotent (overwrites env + unit, restarts)
+- Remote installs use `ssh` under the hood; the target needs `devduck` installed (any method)
+
+### System-wide install
+
+Add `--system` (requires sudo) to install to `/etc/systemd/system/` instead of user-level. On macOS, `--system` writes to `/Library/LaunchDaemons/`.
+
+See the [full guide](https://devduck.tiny.technology/guide/self-replication/) for design notes, troubleshooting, and fleet patterns.
 
 ---
 

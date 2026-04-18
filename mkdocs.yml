@@ -31,6 +31,7 @@ nav:
     - Session Recording: guide/session-recording.md
     - TUI Mode: guide/tui.md
     - AgentCore Deploy: guide/agentcore.md
+    - Self-Replication: guide/self-replication.md
   - Examples:
     - Overview: examples/overview.md
     - CLI Workflows: examples/cli.md

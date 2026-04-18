@@ -100,6 +100,7 @@ devduck "create a REST API"          # one-shot
 devduck --record                     # record session for replay
 devduck --resume session.zip         # resume from snapshot
 devduck deploy --launch              # ship to AgentCore
+devduck service install --name bot   # persist as systemd/launchd service
 ```
 
 ```python
