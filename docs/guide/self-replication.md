@@ -15,6 +15,31 @@ Backed by **systemd** on Linux and **launchd** on macOS. Exposed as both a CLI s
 
 ---
 
+## Mesh by default
+
+Every installed service automatically joins the **devduck mesh** via
+[Zenoh P2P](zenoh.md):
+
+- `DEVDUCK_ENABLE_ZENOH=true` — the service joins the mesh on boot
+- `zenoh_peer` is spliced into `DEVDUCK_TOOLS` if you don't include it
+- Port-binding servers (WebSocket, TCP, MCP, AgentCore proxy) are disabled
+  by default so a fleet of services don't fight over ports
+- Every incoming message (telegram, whatsapp, zenoh broadcast) goes
+  through `DevDuck.__call__`, which injects the current ring context,
+  peer list, and ambient state into the agent's prompt
+
+The result: spawned services are **mesh-aware on every turn**. They know
+who else is alive, what recent activity has happened across the fleet,
+and can broadcast/direct-message peers without any extra configuration.
+
+To opt out, override the flags in `--env`:
+
+```bash
+devduck service install --name solo --env DEVDUCK_ENABLE_ZENOH=false ...
+```
+
+---
+
 ## CLI
 
 ### Install locally (no sudo, user-level)

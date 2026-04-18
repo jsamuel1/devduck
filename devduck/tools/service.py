@@ -115,7 +115,7 @@ class InstallPlan:
         self.home = home or str(Path.home())
         self.model = model
         self.model_provider = model_provider
-        self.tools = tools
+        self.tools = self._ensure_mesh_tools(tools)
         self.system_prompt = system_prompt
         self.startup_prompt = startup_prompt or self._default_startup_prompt()
         self.mcp_servers = mcp_servers
@@ -125,6 +125,46 @@ class InstallPlan:
         self.memory_max = memory_max
         self.description = description or f"🦆 DevDuck Service ({name})"
         self.platform = platform_override or ("linux" if _is_linux() else "macos" if _is_macos() else "linux")
+
+
+    @staticmethod
+    def _ensure_mesh_tools(tools: Optional[str]) -> Optional[str]:
+        """Guarantee zenoh_peer is included in the DEVDUCK_TOOLS config so the
+        spawned service joins the p2p mesh and can exchange ring context /
+        broadcasts with other devducks on the network.
+
+        - If the user passes no tools, we leave it None (devduck loads its
+          own defaults, which already include zenoh_peer).
+        - If the user passes a tools string, we splice zenoh_peer into the
+          devduck.tools group, adding that group if needed. User-specified
+          tools always win; we never remove anything.
+        """
+        if not tools:
+            return tools
+
+        required = "zenoh_peer"
+        # Split by semicolons into package groups
+        groups = [g.strip() for g in tools.split(";") if g.strip()]
+
+        out_groups = []
+        saw_devduck = False
+        for g in groups:
+            if ":" not in g:
+                out_groups.append(g)
+                continue
+            pkg, toollist = g.split(":", 1)
+            pkg = pkg.strip()
+            names = [t.strip() for t in toollist.split(",") if t.strip()]
+            if pkg in ("devduck.tools", "devduck"):
+                saw_devduck = True
+                if required not in names:
+                    names.append(required)
+            out_groups.append(f"{pkg}:{','.join(names)}")
+
+        if not saw_devduck:
+            out_groups.append(f"devduck.tools:{required}")
+
+        return ";".join(out_groups)
 
     @property
     def service_name(self) -> str:
@@ -190,13 +230,24 @@ class InstallPlan:
         )
 
     def env_file_content(self) -> str:
+        # Auto-start servers is ON so zenoh_peer joins the p2p mesh, but the
+        # port-binding servers (ws/tcp/mcp/agentcore-proxy) are OFF because a
+        # headless service rarely needs them and multi-instance port clashes
+        # would break the fleet. Individual flags can be overridden by
+        # user-provided env_vars (those win because they're written later).
         lines = [
             "# 🦆 devduck service environment",
             f"# Service: {self.service_name}",
             "# Managed by `devduck service install` — edit with `devduck service edit`",
             "",
             "BYPASS_TOOL_CONSENT=true",
-            "DEVDUCK_AUTO_START_SERVERS=false",
+            "DEVDUCK_AUTO_START_SERVERS=true",
+            "DEVDUCK_ENABLE_ZENOH=true",
+            "DEVDUCK_ENABLE_WS=false",
+            "DEVDUCK_ENABLE_TCP=false",
+            "DEVDUCK_ENABLE_MCP=false",
+            "DEVDUCK_ENABLE_AGENTCORE_PROXY=false",
+            "DEVDUCK_ENABLE_IPC=false",
         ]
 
         if self.model_provider:

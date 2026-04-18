@@ -261,6 +261,12 @@ def _process_message(message: Dict, bot_token: str):
             logger.error("Failed to create DevDuck instance for telegram message")
             return
 
+        # Use the DevDuck wrapper for invocation (not the bare agent) so that
+        # every incoming telegram message gets mesh/ring/zenoh context injected
+        # — critical for spawned-via-service instances so they stay aware of
+        # their siblings in the fleet.
+        invoker = connection_devduck
+
         # Build context with recent events
         event_count = int(os.getenv("TELEGRAM_DEFAULT_EVENT_COUNT", "20"))
         recent = _get_recent_events(event_count)
@@ -283,7 +289,7 @@ def _process_message(message: Dict, bot_token: str):
 """
 
         prompt = f"[Telegram Chat {chat_id}] {user_display} says: {text}"
-        result = agent(prompt)
+        result = invoker(prompt)
 
         # Auto-reply if enabled
         auto_reply = os.getenv("STRANDS_TELEGRAM_AUTO_REPLY", "false").lower() == "true"

@@ -270,6 +270,10 @@ def _process_whatsapp_message(message: Dict):
             logger.error("Failed to create DevDuck instance for whatsapp message")
             return
 
+        # Use the DevDuck wrapper for invocation so mesh/ring/zenoh context
+        # is injected per message.
+        invoker = connection_devduck
+
         # Build context
         recent = _get_recent_events(10)
         event_ctx = (
@@ -292,7 +296,7 @@ def _process_whatsapp_message(message: Dict):
 """
 
         prompt = f"[WhatsApp {chat_jid}] {sender_jid} says: {text}"
-        result = agent(prompt)
+        result = invoker(prompt)
 
         # Always auto-reply with 🦆 prefix (so bot ignores its own messages)
         if result and str(result).strip():

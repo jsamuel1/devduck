@@ -505,9 +505,12 @@ def handle_command(sample) -> None:
                 # Attach streaming handler to the agent
                 command_devduck.agent.callback_handler = streaming_handler
 
-                # Process with the new agent instance
+                # Process via DevDuck.__call__ (not .agent directly) so that
+                # ring context, zenoh peers, ambient state, event bus, etc. all
+                # get injected into the prompt — the remote peer inherits full
+                # mesh awareness for every message it handles.
                 # Responses stream automatically via callback_handler
-                result = command_devduck.agent(command)
+                result = command_devduck(command)
 
                 # Send turn_end AFTER agent completes and all chunks are sent
                 # This is the definitive signal that streaming is complete
@@ -1342,6 +1345,22 @@ def send_to_peer(peer_id: str, message: str, wait_time: float = 120.0) -> dict:
     # Check if sending to SELF — process locally instead of via pubsub
     if peer_id == get_instance_id():
         try:
+            # Prefer the DevDuck wrapper (it injects mesh/ring/ambient context)
+            # over the bare Agent object.
+            wrapper = None
+            try:
+                from devduck import devduck as _wrapper_candidate
+                wrapper = _wrapper_candidate
+            except Exception:
+                wrapper = None
+
+            if wrapper is not None:
+                result = wrapper(message)
+                return {
+                    "status": "success",
+                    "content": [{"text": f"\n📥 Response from self:\n{str(result)}"}],
+                }
+
             agent = ZENOH_STATE.get("agent")
             if agent:
                 result = agent(message)
