@@ -1817,21 +1817,6 @@ class DevDuck:
             # 🎬 Session recording state
             self._recording = False
 
-            # 🔍 strands-inspect policy (wraps DevDuck.__call__)
-            # Priority: constructor kwarg (future) > DEVDUCK_POLICY env > default "allow_all"
-            self.policy = os.getenv("DEVDUCK_POLICY", "allow_all")
-            self._inspect_enabled = False
-            self._last_inspect_session = None
-            self._inspect_turn_idx = 0
-            try:
-                import strands_inspect as _si  # noqa: F401
-                self._inspect_enabled = True
-                logger.info(f"🔍 strands-inspect enabled | policy={self.policy}")
-                if self.policy != "allow_all":
-                    print(f"🦆 Policy: {self.policy}")
-            except ImportError:
-                logger.warning("strands-inspect not available — DevDuck.__call__ runs unwrapped")
-
             # Server configuration
             if servers is None:
                 # Default server config from env vars
@@ -2997,80 +2982,6 @@ How it works:
                 logger.error(f"Failed to start {server_type} server: {e}")
                 print(f"🦆 ⚠ {server_type.upper()} server failed: {e}")
 
-    def _run_agent_wrapped(self, query_with_context):
-        """Run self.agent(query) — wrapped in strands-inspect @watch when available.
-
-        This gives us per-turn syscall/memory/CPU observability and policy
-        enforcement. The dump (.dill) goes into the session recording dir when
-        SessionRecorder is active, otherwise into strands-inspect's default.
-        """
-        if not self._inspect_enabled:
-            return self.agent(query_with_context)
-
-        try:
-            import strands_inspect
-
-            # Where to dump the inspect session
-            dump_dir = None
-            recorder = get_session_recorder()
-            if recorder and recorder.recording:
-                dump_dir = str(
-                    RECORDING_DIR / recorder.session_id / "inspect"
-                )
-                Path(dump_dir).mkdir(parents=True, exist_ok=True)
-
-            turn_idx = self._inspect_turn_idx
-            self._inspect_turn_idx += 1
-
-            @strands_inspect.watch(
-                policy=self.policy,
-                dump=True,
-                dump_dir=dump_dir,
-                print_summary=False,
-                profile=True,
-            )
-            def _agent_turn(q):
-                return self.agent(q)
-
-            start = time.time()
-            result = _agent_turn(query_with_context)
-            wall_ms = int((time.time() - start) * 1000)
-
-            # Capture the InspectSession if the decorator attached it
-            sess = getattr(_agent_turn, "_last_session", None) or getattr(
-                _agent_turn, "session", None
-            )
-            self._last_inspect_session = sess
-
-            # Emit an event for the SessionRecorder so session-player can render it
-            if recorder and recorder.recording:
-                summary = {}
-                try:
-                    if sess and hasattr(sess, "summary"):
-                        summary = sess.summary() or {}
-                except Exception as e:
-                    logger.debug(f"inspect summary() failed: {e}")
-
-                recorder.event_buffer.record(
-                    "inspect",
-                    "inspect.turn_complete",
-                    {
-                        "turn_idx": turn_idx,
-                        "wall_time_ms": wall_ms,
-                        "policy": self.policy,
-                        "dump_dir": dump_dir,
-                        "syscalls_count": summary.get("syscalls_count", 0),
-                        "memory_peak_kb": summary.get("memory_peak_kb", 0),
-                        "denied_count": summary.get("denied_count", 0),
-                    },
-                )
-
-            return result
-
-        except Exception as e:
-            logger.warning(f"strands-inspect wrap failed, falling back: {e}")
-            return self.agent(query_with_context)
-
     def __call__(self, query):
         """Make the agent callable with automatic knowledge base integration"""
         if not self.agent:
@@ -3142,8 +3053,8 @@ How it works:
             else:
                 query_with_context = query
 
-            # Run the agent — optionally wrapped in strands-inspect @watch
-            result = self._run_agent_wrapped(query_with_context)
+            # Run the agent
+            result = self.agent(query_with_context)
 
             # 🎬 Record agent response if recording active
             if recorder and recorder.recording:
@@ -3416,16 +3327,6 @@ _auto_start = os.getenv("DEVDUCK_AUTO_START_SERVERS", "true").lower() == "true"
 # Disable auto-start if --mcp flag is present (stdio mode)
 if "--mcp" in sys.argv:
     _auto_start = False
-
-# Pre-parse --policy flag so DevDuck.__init__ picks it up via env var
-# (DevDuck is instantiated below, before cli() gets to parse args)
-if "--policy" in sys.argv:
-    try:
-        _pi = sys.argv.index("--policy")
-        if _pi + 1 < len(sys.argv):
-            os.environ["DEVDUCK_POLICY"] = sys.argv[_pi + 1]
-    except (ValueError, IndexError):
-        pass
 
 devduck = DevDuck(auto_start_servers=_auto_start)
 
@@ -4332,13 +4233,6 @@ Claude Desktop Config:
         type=int,
         metavar="ID",
         help="Specific snapshot ID to resume from (default: latest)",
-    )
-
-    parser.add_argument(
-        "--policy",
-        type=str,
-        metavar="NAME_OR_PATH",
-        help="strands-inspect policy: allow_all, sandbox, strict, deny_network, deny_write, deny_all — or path to policy .toml/.json",
     )
 
     args = parser.parse_args()
