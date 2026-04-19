@@ -50,6 +50,7 @@ dependencies = [
     "halo",
     "textual>=0.80",
     "strands-inspect",
+    "numpy",
 ]
 
 [project.optional-dependencies]

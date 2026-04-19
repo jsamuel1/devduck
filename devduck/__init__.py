@@ -4105,6 +4105,17 @@ Claude Desktop Config:
         """,
     )
 
+    # Quick-path: if first arg is not a known subcommand or flag, treat all args as query
+    # This fixes `devduck "some query"` when argparse would otherwise try to parse it as a subcommand
+    _KNOWN_SUBCOMMANDS = {"deploy", "list", "status", "invoke", "service", "tunnel"}
+    if len(sys.argv) > 1 and sys.argv[1] not in _KNOWN_SUBCOMMANDS and not sys.argv[1].startswith("-"):
+        # Treat all positional args as the query
+        query = " ".join(sys.argv[1:])
+        logger.info(f"CLI quick-path query: {query}")
+        result = ask(query)
+        print(result)
+        return
+
     # Subcommands
     subparsers = parser.add_subparsers(dest="command", help="Commands")
 
@@ -4212,7 +4223,7 @@ Claude Desktop Config:
         logger.debug(f"tunnel subcommand unavailable: {_e}")
 
     # Query argument (for default mode)
-    parser.add_argument("query", nargs="*", default=[], help="Query to send to the agent")
+    parser.add_argument("query", nargs="*", default=[], help="Query to send to the agent (or pipe via stdin)")
 
     # MCP stdio mode flag
     parser.add_argument(
@@ -4250,7 +4261,22 @@ Claude Desktop Config:
         help="Specific snapshot ID to resume from (default: latest)",
     )
 
-    args = parser.parse_args()
+    # Pre-scan argv: if first non-flag arg isn't a known subcommand, treat as query.
+    # This avoids argparse subparser collision (e.g. 'devduck "hello world"' breaking).
+    _known_subcommands = {"deploy", "list", "status", "invoke", "service", "tunnel"}
+    _argv = sys.argv[1:]
+    _first_positional = next((a for a in _argv if not a.startswith("-")), None)
+    if _first_positional and _first_positional not in _known_subcommands:
+        # Not a subcommand — force argparse to treat everything after flags as query.
+        # Rebuild argv: keep leading flags, then use "--" separator if available, else just pass through
+        # Simplest: just parse with parse_known_args and stuff the rest into query.
+        args, _rest = parser.parse_known_args()
+        if _rest:
+            args.query = (args.query or []) + _rest
+        if not hasattr(args, "command") or args.command is None:
+            args.command = None
+    else:
+        args = parser.parse_args()
 
     logger.info("CLI mode started")
 
@@ -4396,10 +4422,24 @@ Claude Desktop Config:
         # Also set global state for DevDuck instance
         devduck._recording = True
 
+    # Read from stdin if piped (non-tty)
+    stdin_data = ""
+    if not sys.stdin.isatty():
+        try:
+            stdin_data = sys.stdin.read().strip()
+        except Exception as e:
+            logger.debug(f"stdin read failed: {e}")
+
     try:
+        query_parts = []
         if args.query:
-            query = " ".join(args.query)
-            logger.info(f"CLI query: {query}")
+            query_parts.append(" ".join(args.query))
+        if stdin_data:
+            query_parts.append(stdin_data)
+
+        if query_parts:
+            query = "\n\n".join(query_parts)
+            logger.info(f"CLI query ({'stdin+arg' if stdin_data and args.query else 'stdin' if stdin_data else 'arg'}): {query[:100]}...")
             result = ask(query)
             print(result)
         else:
